@@ -132,7 +132,6 @@ with sc1:
             "IFO 380 %3,50": [0.0, 0.0]
         })
     edited_sea = st.data_editor(st.session_state.sea_df, hide_index=True, use_container_width=True, key="sea_editor")
-    st.session_state.sea_df = edited_sea
 
 with sc2:
     if 'port_df' not in st.session_state:
@@ -144,7 +143,6 @@ with sc2:
             "IFO 380 %3,50": [0.0, 0.0]
         })
     edited_port = st.data_editor(st.session_state.port_df, hide_index=True, use_container_width=True, key="port_editor")
-    st.session_state.port_df = edited_port
 
 
 # =====================================================================
@@ -190,7 +188,7 @@ if 'rotation_df' not in st.session_state:
         "Distance": [0.0, 0.0, 0.0]
     })
 
-# num_rows="dynamic" ile tabloya satır ekleme/silme özelliği kazandırıyoruz
+# num_rows="dynamic" ile tabloya satır ekleme/silme özelliği
 edited_rotation = st.data_editor(
     st.session_state.rotation_df,
     column_config={
@@ -215,5 +213,3 @@ edited_rotation = st.data_editor(
     use_container_width=True,
     key="rotation_editor"
 )
-
-st.session_state.rotation_df = edited_rotation
