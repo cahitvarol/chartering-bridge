@@ -9,13 +9,16 @@ st.markdown("""
     <style>
     .stNumberInput label { font-size: 12px !important; color: #888 !important; }
     .stTextInput label { font-size: 12px !important; color: #888 !important; }
-    .main-header { font-size: 24px; font-weight: bold; margin-bottom: 20px; border-bottom: 2px solid #f0f2f6; }
+    .main-header { font-size: 22px; font-weight: bold; margin-bottom: 10px; border-bottom: 2px solid #f0f2f6; padding-top: 20px;}
     </style>
 """, unsafe_allow_html=True)
 
+
+# =====================================================================
+# BÖLÜM 1: GENERAL INFORMATION
+# =====================================================================
 st.markdown('<p class="main-header">1 - General Information</p>', unsafe_allow_html=True)
 
-# ----------------- ANA DÜZEN -----------------
 col_left, col_right, col_button = st.columns([1.2, 3, 0.8])
 
 with col_left:
@@ -34,9 +37,8 @@ with col_left:
     with curr_col2: currency_rate = st.number_input("", value=1.050, format="%.3f", label_visibility="collapsed")
 
 with col_right:
-    st.markdown("**Bunker Prices (Interactive Table)**")
+    st.markdown("**Bunker Prices**")
     
-    # Gerçek bir Excel tablosu altyapısı (Dataframe) kuruyoruz
     if 'bunker_df' not in st.session_state:
         st.session_state.bunker_df = pd.DataFrame({
             "Seç": [True, False, False, False],
@@ -47,7 +49,6 @@ with col_right:
             "IFO 380 %3,50": [580.0, 550.0, 0.0, 0.0]
         })
 
-    # Tabloyu ekranda göster
     edited_df = st.data_editor(
         st.session_state.bunker_df,
         column_config={
@@ -63,21 +64,17 @@ with col_right:
         key="bunker_editor"
     )
     
-    # ---- AKILLI SEÇİM (SADECE TEK LİMAN SEÇTİRME) MANTIĞI ----
+    # Akıllı Seçim Mantığı
     prev_selections = st.session_state.bunker_df["Seç"].tolist()
     curr_selections = edited_df["Seç"].tolist()
-    
-    # Kullanıcının yeni tıkladığı kutuyu buluyoruz
     changed_to_true = [i for i, (p, c) in enumerate(zip(prev_selections, curr_selections)) if not p and c]
     
     if changed_to_true:
-        # Yeni bir kutu işaretlendiyse; tüm kutuları temizle, sadece son tıklananı işaretle
         edited_df["Seç"] = False
         edited_df.loc[changed_to_true[0], "Seç"] = True
         st.session_state.bunker_df = edited_df
-        st.rerun() # Ekranı anında yenile ki diğer tikler kalksın
+        st.rerun() 
     else:
-        # Bir değişiklik yoksa güncel tabloyu hafızaya kaydet
         st.session_state.bunker_df = edited_df
 
 with col_button:
@@ -88,14 +85,78 @@ with col_button:
         st.session_state.bunker_df.loc[st.session_state.bunker_df["Liman"] == "Istanbul", ["MGO %0,10", "ULSFO %0,10", "VLSFO %0,50", "IFO 380 %3,50"]] = [1090.0, 850.0, 680.0, 610.0]
         st.rerun()
 
-# ----------------- HESAPLAMA MANTIĞI -----------------
-st.divider()
-
-# Hafızadaki tablodan seçili olan limanı bul
+# ----------------- BÖLÜM 1 ALT BİLGİ -----------------
 secili_satirlar = st.session_state.bunker_df[st.session_state.bunker_df["Seç"] == True]
-
 if not secili_satirlar.empty:
     aktif_liman = secili_satirlar.iloc[0]["Liman"]
-    st.caption(f"Aktif Kullanılan Yakıt Fiyatı: **{aktif_liman}** verileri baz alınacaktır.")
+    st.caption(f"Aktif Liman: **{aktif_liman}**")
 else:
-    st.warning("Lütfen tablonun ilk sütunundan yakıt alınacak en az bir limanı seçin!")
+    st.warning("Lütfen yakıt alınacak en az bir limanı seçin!")
+
+
+# =====================================================================
+# BÖLÜM 2: VESSEL DETAILS
+# =====================================================================
+st.markdown('<p class="main-header">2 - Vessel Details</p>', unsafe_allow_html=True)
+
+# 6 Sütunlu Ana Gemi Bilgileri
+v1, v2, v3, v4, v5, v6 = st.columns(6)
+
+with v1:
+    imo = st.text_input("IMO", "")
+    name = st.text_input("Name", "")
+    v_type = st.text_input("Type", "")
+
+with v2:
+    flag = st.text_input("Flag", "")
+    v_class = st.text_input("Class", "")
+    built = st.text_input("Built", "")
+
+with v3:
+    dwt = st.number_input("DWT", value=0)
+    dwcc = st.number_input("DWCC", value=0)
+
+with v4:
+    grain = st.number_input("Grain Cap", value=0)
+    bale = st.number_input("Bale Cap", value=0)
+
+with v5:
+    gt = st.number_input("GT", value=0)
+    nt = st.number_input("NT", value=0)
+
+with v6:
+    loa = st.number_input("LOA", value=0.0, format="%.2f")
+    beam = st.number_input("Beam", value=0.0, format="%.2f")
+
+st.write("") # Boşluk
+
+# Hız ve Yakıt Tüketim Tabloları
+st.markdown("**Speed & Consumption**")
+sc1, sc2 = st.columns([1.3, 1]) # Seyir tablosu biraz daha geniş (Speed sütunu var)
+
+with sc1:
+    if 'sea_df' not in st.session_state:
+        st.session_state.sea_df = pd.DataFrame({
+            "At Sea": ["Ballast", "Laden"],
+            "Speed": [12.0, 11.5],
+            "MGO %0,10": [0.0, 0.0],
+            "ULSFO %0,10": [0.0, 0.0],
+            "VLSFO %0,50": [22.0, 24.0],
+            "IFO 380 %3,50": [0.0, 0.0]
+        })
+    # Tabloyu oluştur (Excel gibi düzenlenebilir)
+    edited_sea = st.data_editor(st.session_state.sea_df, hide_index=True, use_container_width=True, key="sea_editor")
+    st.session_state.sea_df = edited_sea
+
+with sc2:
+    if 'port_df' not in st.session_state:
+        st.session_state.port_df = pd.DataFrame({
+            "At Port": ["Idle", "Work"],
+            "MGO %0,10": [0.2, 0.2],
+            "ULSFO %0,10": [0.0, 0.0],
+            "VLSFO %0,50": [2.0, 4.5],
+            "IFO 380 %3,50": [0.0, 0.0]
+        })
+    # Tabloyu oluştur (Excel gibi düzenlenebilir)
+    edited_port = st.data_editor(st.session_state.port_df, hide_index=True, use_container_width=True, key="port_editor")
+    st.session_state.port_df = edited_port
