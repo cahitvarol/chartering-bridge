@@ -1,6 +1,6 @@
 import streamlit as st
 import pandas as pd
-from datetime import datetime
+from datetime import datetime, date
 
 # Sayfa Yapılandırması
 st.set_page_config(page_title="Chartering Bridge", layout="wide")
@@ -159,7 +159,13 @@ with cp1:
 
 with cp2:
     freight_term = st.selectbox("Freight Term", ["pmt", "lumpsum"])
-    terms = st.selectbox("Terms", ["FIO", "FIOS", "FIOT", "FIOST", "Liner"])
+    # Terimler güncellendi ve varsayılan değer 2. indeks olan FIOST yapıldı (0'dan başlar: 0,1,2)
+    terms = st.selectbox("Terms", ["FIO", "FIOS", "FIOST", "LIFO", "FILO", "LILO"], index=2)
+    
+    # Laycan takvimi eklendi
+    laycan_date = st.date_input("Laycan", value=date.today())
+    # Seçilen tarih İngilizce gün ismiyle gösteriliyor (Örn: 14 July 2026, Tuesday)
+    st.markdown(f"<span style='color:#c5a059; font-size:14px; font-weight:bold;'>{laycan_date.strftime('%d %B %Y, %A')}</span>", unsafe_allow_html=True)
 
 with cp3:
     freight = st.number_input("Freight", value=0.0)
@@ -184,29 +190,37 @@ if 'rotation_df' not in st.session_state:
         "Port Rotation": ["Ballast Port", "Load Port", "Discharge Port"],
         "Port Name": ["", "", ""],
         "Rate": [0.0, 0.0, 0.0],
-        "L/D Term": ["mts/day", "mts/day", "mts/day"],
-        "Distance": [0.0, 0.0, 0.0]
+        "Unit": ["mts/day", "mts/day", "mts/day"],            # Başlık güncellendi
+        "L/D Terms": ["SSHEX", "SSHEX", "SSHEX"],             # Yeni sütun eklendi
+        "Extra Days": [0.0, 0.0, 0.0],                        # Yeni sütun eklendi
+        "Distance": [0.0, 0.0, 0.0],
+        "PDA": [0.0, 0.0, 0.0]                                # Yeni sütun eklendi
     })
 
-# num_rows="dynamic" ile tabloya satır ekleme/silme özelliği
+# Sütun ayarları
 edited_rotation = st.data_editor(
     st.session_state.rotation_df,
     column_config={
         "Port Rotation": st.column_config.SelectboxColumn(
             "Port Rotation",
-            help="Select the port type",
             options=["Ballast Port", "Load Port", "Discharge Port"],
             required=True
         ),
         "Port Name": st.column_config.TextColumn("Port Name"),
         "Rate": st.column_config.NumberColumn("Rate", format="%.2f"),
-        "L/D Term": st.column_config.SelectboxColumn(
-            "L/D Term",
-            help="Select loading/discharging term",
+        "Unit": st.column_config.SelectboxColumn(
+            "Unit",
             options=["mts/day", "days", "ttl days"],
             required=True
         ),
-        "Distance": st.column_config.NumberColumn("Distance", format="%.2f")
+        "L/D Terms": st.column_config.SelectboxColumn(
+            "L/D Terms",
+            options=["SSHEX", "SSHINC", "SHEX", "SHINC", "FHEX", "FHINC"],
+            required=True
+        ),
+        "Extra Days": st.column_config.NumberColumn("Extra Days", format="%.2f"),
+        "Distance": st.column_config.NumberColumn("Distance", format="%.2f"),
+        "PDA": st.column_config.NumberColumn("PDA", format="$ %.2f")
     },
     hide_index=True,
     num_rows="dynamic",
