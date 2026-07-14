@@ -47,7 +47,7 @@ with col_right:
             "IFO 380 %3,50": [580.0, 550.0, 0.0, 0.0]
         })
 
-    # Tabloyu ekranda düzenlenebilir (Excel gibi) gösteriyoruz
+    # Tabloyu ekranda göster
     edited_df = st.data_editor(
         st.session_state.bunker_df,
         column_config={
@@ -59,30 +59,43 @@ with col_right:
             "IFO 380 %3,50": st.column_config.NumberColumn(format="$ %.2f"),
         },
         hide_index=True,
-        use_container_width=True
+        use_container_width=True,
+        key="bunker_editor"
     )
     
-    # Kullanıcının tabloda yaptığı anlık değişiklikleri hafızaya kaydediyoruz
-    st.session_state.bunker_df = edited_df
+    # ---- AKILLI SEÇİM (SADECE TEK LİMAN SEÇTİRME) MANTIĞI ----
+    prev_selections = st.session_state.bunker_df["Seç"].tolist()
+    curr_selections = edited_df["Seç"].tolist()
+    
+    # Kullanıcının yeni tıkladığı kutuyu buluyoruz
+    changed_to_true = [i for i, (p, c) in enumerate(zip(prev_selections, curr_selections)) if not p and c]
+    
+    if changed_to_true:
+        # Yeni bir kutu işaretlendiyse; tüm kutuları temizle, sadece son tıklananı işaretle
+        edited_df["Seç"] = False
+        edited_df.loc[changed_to_true[0], "Seç"] = True
+        st.session_state.bunker_df = edited_df
+        st.rerun() # Ekranı anında yenile ki diğer tikler kalksın
+    else:
+        # Bir değişiklik yoksa güncel tabloyu hafızaya kaydet
+        st.session_state.bunker_df = edited_df
 
 with col_button:
     st.write("") 
     st.write("")
-    # Buton sağ tarafta yerini aldı
     if st.button("Get Bunker Prices", type="primary", use_container_width=True):
         st.toast("Güncel fiyatlar çekiliyor...", icon="⛽")
-        # 2. Adımda burayı API'ye bağlayacağız, şimdilik test amaçlı fiyatları güncelliyor
         st.session_state.bunker_df.loc[st.session_state.bunker_df["Liman"] == "Istanbul", ["MGO %0,10", "ULSFO %0,10", "VLSFO %0,50", "IFO 380 %3,50"]] = [1090.0, 850.0, 680.0, 610.0]
         st.rerun()
 
 # ----------------- HESAPLAMA MANTIĞI -----------------
 st.divider()
 
-# Seçili limanı bulma işlemi
-secili_satirlar = edited_df[edited_df["Seç"] == True]
+# Hafızadaki tablodan seçili olan limanı bul
+secili_satirlar = st.session_state.bunker_df[st.session_state.bunker_df["Seç"] == True]
 
 if not secili_satirlar.empty:
     aktif_liman = secili_satirlar.iloc[0]["Liman"]
     st.caption(f"Aktif Kullanılan Yakıt Fiyatı: **{aktif_liman}** verileri baz alınacaktır.")
 else:
-    st.error("Lütfen tablonun ilk sütunundan yakıt alınacak en az bir limanı seçin!")
+    st.warning("Lütfen tablonun ilk sütunundan yakıt alınacak en az bir limanı seçin!")
