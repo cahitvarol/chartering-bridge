@@ -59,8 +59,6 @@ with col_right:
     ports = ["Istanbul", "Gibraltar", "3rd Port", "4th Port"]
     
     # Radyo Butonu (Hangi liman seçili?)
-    # Streamlit'te radyo butonu dikey bir listedir. 
-    # Tablonun soluna hizalamak için boşluklarla simüle ediyoruz.
     selected_port = st.radio("Seç", ports, label_visibility="collapsed")
 
     # Satırları oluşturma
@@ -95,11 +93,3 @@ with col_button:
 # ----------------- ALT BİLGİ -----------------
 st.divider()
 st.caption(f"Aktif Kullanılan Yakıt Fiyatı: {selected_port} verileri baz alınacaktır.")
-
-**Bu Adımda Ne Yaptık?**
-1.  **Görsel Hizalama:** "Voyage ID No" gibi yazıları gri kutuların yanına getirdik.
-2.  **Yakıt Matrisi:** Excel'deki gibi 4 liman ve 4 yakıt tipini içeren şık bir tablo kurduk.
-3.  **Liman Seçimi:** Satırların solundaki "⬜/✅" işaretleri ve radyo butonu ile hangi liman fiyatının hesaplamaya gireceğini belirledik.
-4.  **Hafıza Yönetimi:** `st.session_state` kullanarak fiyatların sayfa yenilendiğinde kaybolmamasını sağladık.
-
-Uygulamanın görüntüsü istediğiniz gibiyse, Bölüm 2 için Excel görselini bekliyorum!
