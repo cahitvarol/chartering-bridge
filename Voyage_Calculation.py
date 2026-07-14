@@ -9,10 +9,10 @@ st.markdown("""
     <style>
     .stNumberInput label { font-size: 12px !important; color: #888 !important; }
     .stTextInput label { font-size: 12px !important; color: #888 !important; }
+    .stSelectbox label { font-size: 12px !important; color: #888 !important; }
     .main-header { font-size: 22px; font-weight: bold; margin-bottom: 10px; border-bottom: 2px solid #f0f2f6; padding-top: 20px;}
     </style>
 """, unsafe_allow_html=True)
-
 
 # =====================================================================
 # BÖLÜM 1: GENERAL INFORMATION
@@ -23,7 +23,6 @@ col_left, col_right, col_button = st.columns([1.2, 3, 0.8])
 
 with col_left:
     st.write("") 
-    
     v_id_col1, v_id_col2 = st.columns([1, 1.5])
     with v_id_col1: st.info("Voyage ID No")
     with v_id_col2: voyage_id = st.text_input("", value="2026-001", label_visibility="collapsed")
@@ -38,7 +37,6 @@ with col_left:
 
 with col_right:
     st.markdown("**Bunker Prices**")
-    
     if 'bunker_df' not in st.session_state:
         st.session_state.bunker_df = pd.DataFrame({
             "Seç": [True, False, False, False],
@@ -64,7 +62,6 @@ with col_right:
         key="bunker_editor"
     )
     
-    # Akıllı Seçim Mantığı
     prev_selections = st.session_state.bunker_df["Seç"].tolist()
     curr_selections = edited_df["Seç"].tolist()
     changed_to_true = [i for i, (p, c) in enumerate(zip(prev_selections, curr_selections)) if not p and c]
@@ -85,7 +82,6 @@ with col_button:
         st.session_state.bunker_df.loc[st.session_state.bunker_df["Liman"] == "Istanbul", ["MGO %0,10", "ULSFO %0,10", "VLSFO %0,50", "IFO 380 %3,50"]] = [1090.0, 850.0, 680.0, 610.0]
         st.rerun()
 
-# ----------------- BÖLÜM 1 ALT BİLGİ -----------------
 secili_satirlar = st.session_state.bunker_df[st.session_state.bunker_df["Seç"] == True]
 if not secili_satirlar.empty:
     aktif_liman = secili_satirlar.iloc[0]["Liman"]
@@ -99,40 +95,31 @@ else:
 # =====================================================================
 st.markdown('<p class="main-header">2 - Vessel Details</p>', unsafe_allow_html=True)
 
-# 6 Sütunlu Ana Gemi Bilgileri
 v1, v2, v3, v4, v5, v6 = st.columns(6)
-
 with v1:
     imo = st.text_input("IMO", "")
     name = st.text_input("Name", "")
     v_type = st.text_input("Type", "")
-
 with v2:
     flag = st.text_input("Flag", "")
     v_class = st.text_input("Class", "")
     built = st.text_input("Built", "")
-
 with v3:
     dwt = st.number_input("DWT", value=0)
     dwcc = st.number_input("DWCC", value=0)
-
 with v4:
     grain = st.number_input("Grain Cap", value=0)
     bale = st.number_input("Bale Cap", value=0)
-
 with v5:
     gt = st.number_input("GT", value=0)
     nt = st.number_input("NT", value=0)
-
 with v6:
     loa = st.number_input("LOA", value=0.0, format="%.2f")
     beam = st.number_input("Beam", value=0.0, format="%.2f")
 
-st.write("") # Boşluk
-
-# Hız ve Yakıt Tüketim Tabloları
+st.write("") 
 st.markdown("**Speed & Consumption**")
-sc1, sc2 = st.columns([1.3, 1]) # Seyir tablosu biraz daha geniş (Speed sütunu var)
+sc1, sc2 = st.columns([1.3, 1]) 
 
 with sc1:
     if 'sea_df' not in st.session_state:
@@ -144,7 +131,6 @@ with sc1:
             "VLSFO %0,50": [22.0, 24.0],
             "IFO 380 %3,50": [0.0, 0.0]
         })
-    # Tabloyu oluştur (Excel gibi düzenlenebilir)
     edited_sea = st.data_editor(st.session_state.sea_df, hide_index=True, use_container_width=True, key="sea_editor")
     st.session_state.sea_df = edited_sea
 
@@ -157,6 +143,77 @@ with sc2:
             "VLSFO %0,50": [2.0, 4.5],
             "IFO 380 %3,50": [0.0, 0.0]
         })
-    # Tabloyu oluştur (Excel gibi düzenlenebilir)
     edited_port = st.data_editor(st.session_state.port_df, hide_index=True, use_container_width=True, key="port_editor")
     st.session_state.port_df = edited_port
+
+
+# =====================================================================
+# BÖLÜM 3: C/P DETAILS
+# =====================================================================
+st.markdown('<p class="main-header">3 - C/P Details</p>', unsafe_allow_html=True)
+
+cp1, cp2, cp3, cp4, cp5 = st.columns(5)
+
+with cp1:
+    account = st.text_input("Account", "TBN")
+    cargo_item = st.text_input("Cargo Item", "Mineral")
+    quantity = st.number_input("Quantity", value=0.0)
+
+with cp2:
+    freight_term = st.selectbox("Freight Term", ["pmt", "lumpsum"])
+    terms = st.selectbox("Terms", ["FIO", "FIOS", "FIOT", "FIOST", "Liner"])
+
+with cp3:
+    freight = st.number_input("Freight", value=0.0)
+    demurrage = st.number_input("Demurrage", value=0.0)
+    despatch = st.number_input("Despatch", value=0.0)
+
+with cp4:
+    extra_insurance = st.number_input("Extra Insurance", value=0.0)
+    cargo_survey = st.number_input("Cargo Survey", value=0.0)
+    strait_canal = st.number_input("Strait / Canal Passage Expenses", value=0.0)
+
+with cp5:
+    add_comm = st.number_input("Address Commission (%)", value=0.0, step=0.25)
+    broker_comm = st.number_input("Brokerage Commission (%)", value=0.0, step=0.25)
+    other_exp = st.number_input("Other", value=0.0)
+
+st.write("")
+st.markdown("**Port Rotation**")
+
+if 'rotation_df' not in st.session_state:
+    st.session_state.rotation_df = pd.DataFrame({
+        "Port Rotation": ["Ballast Port", "Load Port", "Discharge Port"],
+        "Port Name": ["", "", ""],
+        "Rate": [0.0, 0.0, 0.0],
+        "L/D Term": ["mts/day", "mts/day", "mts/day"],
+        "Distance": [0.0, 0.0, 0.0]
+    })
+
+# num_rows="dynamic" ile tabloya satır ekleme/silme özelliği kazandırıyoruz
+edited_rotation = st.data_editor(
+    st.session_state.rotation_df,
+    column_config={
+        "Port Rotation": st.column_config.SelectboxColumn(
+            "Port Rotation",
+            help="Select the port type",
+            options=["Ballast Port", "Load Port", "Discharge Port"],
+            required=True
+        ),
+        "Port Name": st.column_config.TextColumn("Port Name"),
+        "Rate": st.column_config.NumberColumn("Rate", format="%.2f"),
+        "L/D Term": st.column_config.SelectboxColumn(
+            "L/D Term",
+            help="Select loading/discharging term",
+            options=["mts/day", "days", "ttl days"],
+            required=True
+        ),
+        "Distance": st.column_config.NumberColumn("Distance", format="%.2f")
+    },
+    hide_index=True,
+    num_rows="dynamic",
+    use_container_width=True,
+    key="rotation_editor"
+)
+
+st.session_state.rotation_df = edited_rotation
