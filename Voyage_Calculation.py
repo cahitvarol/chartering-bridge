@@ -1,90 +1,105 @@
 import streamlit as st
 import pandas as pd
+from datetime import datetime
 
-st.set_page_config(page_title="Chartering Bridge - Voyage Calc", layout="wide")
+# Sayfa Yapılandırması
+st.set_page_config(page_title="Chartering Bridge", layout="wide")
 
-st.title("🚢 Voyage Calculation (Adım 1: Görsel Tasarım)")
-st.markdown("---")
+# CSS ile Excel benzeri bir tablo görünümü sağlıyoruz
+st.markdown("""
+    <style>
+    .stNumberInput label { font-size: 12px !important; color: #888 !important; }
+    .stTextInput label { font-size: 12px !important; color: #888 !important; }
+    .main-header { font-size: 24px; font-weight: bold; margin-bottom: 20px; border-bottom: 2px solid #f0f2f6; }
+    </style>
+""", unsafe_allow_html=True)
 
-# Yan yana etiket ve kutucuk oluşturmak için pratik bir yardımcı fonksiyon
-def satir_olustur(etiket, varsayilan_deger, tip="metin", adim=1.0):
-    col1, col2 = st.columns([1, 1.5]) # Etiket ve kutu genişlik oranı
-    with col1:
-        st.write(f"**{etiket}**")
-    with col2:
-        if tip == "metin":
-            return st.text_input(etiket, value=varsayilan_deger, label_visibility="collapsed")
-        elif tip == "sayi":
-            return st.number_input(etiket, value=varsayilan_deger, step=adim, format="%.2f", label_visibility="collapsed")
+st.markdown('<p class="main-header">1 - General Information</p>', unsafe_allow_html=True)
 
-# ================= 1. ÜST BÖLÜM (Genel Bilgiler) =================
-top1, top2, top3, top4 = st.columns(4)
-with top1:
-    vessel_name = satir_olustur("Vessel Name :", "TBN", "metin")
-    voyage_no = satir_olustur("Voyage No :", "", "metin")
-with top2:
-    date = satir_olustur("Date :", "14.07.2026", "metin")
-    currency = satir_olustur("Currency Rate :", 1.050, "sayi", 0.01)
-with top3:
-    bunker_price = satir_olustur("Bunker Price :", 750.0, "sayi", 10.0)
-with top4:
-    bunker_sea = satir_olustur("Bunker Cons (Sea):", 6.0, "sayi", 0.5)
-    bunker_port = satir_olustur("Bunker Cons (Port):", 0.20, "sayi", 0.05)
+# ----------------- ANA DÜZEN -----------------
+# Ekranı iki ana sütuna bölüyoruz: Sol (Voyage Bilgileri), Sağ (Bunker Tablosu ve Buton)
+col_left, col_right, col_button = st.columns([1.2, 3, 0.8])
 
-st.markdown("---")
-
-# ================= FORM BAŞLANGICI =================
-# Tüm girdileri bir form içine alıyoruz ki sayfa sürekli yenilenip çökmesin
-with st.form("voyage_form"):
+with col_left:
+    st.write("") # Boşluk
+    # Voyage ID No
+    v_id_col1, v_id_col2 = st.columns([1, 1.5])
+    with v_id_col1: st.info("Voyage ID No")
+    with v_id_col2: voyage_id = st.text_input("", value="2026-001", label_visibility="collapsed")
     
-    # ================= 2. ORTA BÖLÜM =================
-    col1, col2, col3 = st.columns([1, 1, 1.5])
+    # Date
+    date_col1, date_col2 = st.columns([1, 1.5])
+    with date_col1: st.info("Date")
+    with date_col2: voyage_date = st.date_input("", value=datetime(2026, 7, 14), label_visibility="collapsed")
     
-    with col1:
-        st.markdown("### 📋 CHARTER PARTY DETAILS")
-        account = satir_olustur("Account", "TBN", "metin")
-        cargo = satir_olustur("Cargo Item", "Mineral", "metin")
-        freight_type = st.selectbox("Freight Type", ["PMT", "LUMPSUM"])
-        freight_rate = satir_olustur("Freight Rate ($)", 50.0, "sayi")
-        qty = satir_olustur("Loaded Qty (Mts)", 6500.0, "sayi", 500.0)
-        terms = satir_olustur("Load/Disch Term", "FIOST", "metin")
-        broker_comm = satir_olustur("Broker Comm (%)", 2.50, "sayi", 0.25)
-        load_rate = satir_olustur("Load Rate (Days)", 3.0, "sayi", 0.5)
-        disch_rate = satir_olustur("Disch Rate (Days)", 3.0, "sayi", 0.5)
+    # Currency Rate
+    curr_col1, curr_col2 = st.columns([1, 1.5])
+    with curr_col1: st.info("Currency Rate")
+    with curr_col2: currency_rate = st.number_input("", value=1.050, format="%.3f", label_visibility="collapsed")
 
-    with col2:
-        st.markdown("### ⚓ PORT ROTATION & DA's")
-        st.markdown("**Ballast**")
-        ballast_port = satir_olustur("Ballast Port", "İskenderun", "metin")
-        ballast_da = satir_olustur("Ballast DA ($)", 0.0, "sayi", 1000.0)
-        
-        st.markdown("**Load Ports**")
-        load_port = satir_olustur("Load Port #1", "Alexandria", "metin")
-        load_da = satir_olustur("Load DA ($)", 14000.0, "sayi", 1000.0)
-        
-        st.markdown("**Discharge Ports**")
-        disch_port = satir_olustur("Disch Port #1", "Kaliningrad", "metin")
-        disch_da = satir_olustur("Disch DA ($)", 20000.0, "sayi", 1000.0)
-
-    with col3:
-        st.markdown("### 🗺️ DISTANCES & SPEED")
-        st.markdown("**(1) Ballast ➔ Load**")
-        dist1 = satir_olustur("Distance 1 (NM)", 465.0, "sayi", 10.0)
-        speed1 = satir_olustur("Speed 1 (Knots)", 11.0, "sayi", 0.5)
-        
-        st.markdown("**(2) Load ➔ Discharge**")
-        dist2 = satir_olustur("Distance 2 (NM)", 4200.0, "sayi", 10.0)
-        speed2 = satir_olustur("Speed 2 (Knots)", 9.0, "sayi", 0.5)
-        
-        st.markdown("**Diğer**")
-        extra_days = satir_olustur("Extra Days", 6.0, "sayi", 0.5)
-        strait_cost = satir_olustur("Turkish Straits ($)", 4000.0, "sayi", 500.0)
-        
-    st.markdown("---")
+with col_right:
+    # Bunker Tablosu Başlıkları
+    h_col1, h_col2, h_col3, h_col4, h_col5, h_col6 = st.columns([0.4, 1.2, 1, 1, 1, 1])
+    h_col2.markdown("**Bunker Prices**")
+    h_col3.markdown("**MGO %0,10**")
+    h_col4.markdown("**ULSFO %0,10**")
+    h_col5.markdown("**VLSFO %0,50**")
+    h_col6.markdown("**IFO 380 %3,50**")
     
-    # Butonları Formun Altına Koyuyoruz (Şimdilik aksiyonları yok, Adım 2'de eklenecek)
-    col_btn1, col_btn2 = st.columns(2)
-    with col_btn1:
-        submit_btn = st.form_submit_button("🧮 HESAPLA (Adım 3'te çalışacak)", use_container_width=True)
-    with col_btn2:
-        st.info("Bunker fiyatlarını çekme butonu Adım 2'de buraya gelecek.")
+    # Session State: Fiyatları hafızada tutmak için (Get Prices butonuna basınca değişecek)
+    if 'bunker_data' not in st.session_state:
+        st.session_state.bunker_data = {
+            'Istanbul': [1050.0, 820.0, 640.0, 580.0],
+            'Gibraltar': [1020.0, 790.0, 610.0, 550.0],
+            '3rd Port': [0.0, 0.0, 0.0, 0.0],
+            '4th Port': [0.0, 0.0, 0.0, 0.0]
+        }
+
+    # Liman Listesi
+    ports = ["Istanbul", "Gibraltar", "3rd Port", "4th Port"]
+    
+    # Radyo Butonu (Hangi liman seçili?)
+    # Streamlit'te radyo butonu dikey bir listedir. 
+    # Tablonun soluna hizalamak için boşluklarla simüle ediyoruz.
+    selected_port = st.radio("Seç", ports, label_visibility="collapsed")
+
+    # Satırları oluşturma
+    for port in ports:
+        r_col1, r_col2, r_col3, r_col4, r_col5, r_col6 = st.columns([0.4, 1.2, 1, 1, 1, 1])
+        
+        # Seçili olan limanı görsel olarak belirtmek için arka planı farklı hissettirebiliriz
+        is_selected = "✅" if selected_port == port else "⬜"
+        r_col1.write(is_selected)
+        
+        r_col2.info(port)
+        
+        # Fiyat girişleri
+        p1 = r_col3.number_input(f"MGO_{port}", value=st.session_state.bunker_data[port][0], label_visibility="collapsed")
+        p2 = r_col4.number_input(f"ULSFO_{port}", value=st.session_state.bunker_data[port][1], label_visibility="collapsed")
+        p3 = r_col5.number_input(f"VLSFO_{port}", value=st.session_state.bunker_data[port][2], label_visibility="collapsed")
+        p4 = r_col6.number_input(f"IFO_{port}", value=st.session_state.bunker_data[port][3], label_visibility="collapsed")
+        
+        # Güncel değerleri kaydet
+        st.session_state.bunker_data[port] = [p1, p2, p3, p4]
+
+with col_button:
+    st.write("") # Üstten hizalama için boşluk
+    st.write("")
+    if st.button("Get Bunker Prices", type="primary", use_container_width=True):
+        # Bu kısım Step 2'de API'ye bağlanacak
+        st.toast("Güncel fiyatlar çekiliyor...", icon="⛽")
+        # Örnek güncelleme:
+        st.session_state.bunker_data['Istanbul'] = [1090.0, 850.0, 680.0, 610.0]
+        st.rerun()
+
+# ----------------- ALT BİLGİ -----------------
+st.divider()
+st.caption(f"Aktif Kullanılan Yakıt Fiyatı: {selected_port} verileri baz alınacaktır.")
+
+**Bu Adımda Ne Yaptık?**
+1.  **Görsel Hizalama:** "Voyage ID No" gibi yazıları gri kutuların yanına getirdik.
+2.  **Yakıt Matrisi:** Excel'deki gibi 4 liman ve 4 yakıt tipini içeren şık bir tablo kurduk.
+3.  **Liman Seçimi:** Satırların solundaki "⬜/✅" işaretleri ve radyo butonu ile hangi liman fiyatının hesaplamaya gireceğini belirledik.
+4.  **Hafıza Yönetimi:** `st.session_state` kullanarak fiyatların sayfa yenilendiğinde kaybolmamasını sağladık.
+
+Uygulamanın görüntüsü istediğiniz gibiyse, Bölüm 2 için Excel görselini bekliyorum!
