@@ -225,7 +225,6 @@ with btn_col:
         filtered_df = df[df["Port Type"].isin(["Load Port", "Discharge Port"])]
         
         if not filtered_df.empty:
-            # Port Charges tablosuna 'Port Type' ve 'Liner Expenses' eklendi
             st.session_state.port_charges_df = pd.DataFrame({
                 "Port Type": filtered_df["Port Type"].tolist(),
                 "Port Name": filtered_df["Port Name"].tolist(),
@@ -301,7 +300,6 @@ st.markdown('<p class="main-header">4 - Calculation & Strategy</p>', unsafe_allo
 calc_col1, calc_col2, calc_col3 = st.columns([2.5, 1.2, 1.2])
 
 with calc_col1:
-    # Voyage Summary olarak güncellendi ve başlıklar alt hücrelere alındı
     st.markdown("<div style='text-align: center; font-weight: bold; background-color: #f0f2f6; color: black; padding: 5px;'>Voyage Summary</div>", unsafe_allow_html=True)
     header_tuples = [
         (" ", "Port Rotation"), (" ", "Duration"),
@@ -311,74 +309,5 @@ with calc_col1:
         ("IFO380", "mts"), ("IFO380", "Cost")
     ]
     calc_multi_columns = pd.MultiIndex.from_tuples(header_tuples)
-    
-    # "Steaming (Return Ballast)" satırı Total'den önce eklendi
     row_names = ["Ballast Port", "Steaming (Bal)", "Load Port", "Steaming (Ldn)", "Discharge Port", "Steaming (Return Ballast)", "Total"]
-    bunker_calc_df = pd.DataFrame(0.0, index=range(len(row_names)), columns=calc_multi_columns)
-    bunker_calc_df[(" ", "Port Rotation")] = row_names
-    st.dataframe(bunker_calc_df, hide_index=True, use_container_width=True)
-
-with calc_col2:
-    st.markdown("<div style='text-align: center; font-weight: bold; background-color: #f0f2f6; color: black; padding: 5px;'>Operational Expenses</div>", unsafe_allow_html=True)
-    op_exp_df = pd.DataFrame({
-        # Freight Tax, Liner IN ve Liner OUT kalemleri Port Charges altına eklendi
-        "Item": ["Bunker Expense", "Port Charges", "Freight Tax", "Liner IN", "Liner OUT", "Despatch", "Strait / Canal Exp.", "Extra Insurance", "Cargo Survey", "Other", "Add Comm.", "Brkg Comm.", "TOTAL"],
-        "Cost": [0.0] * 13
-    })
-    st.dataframe(op_exp_df, hide_index=True, use_container_width=True, column_config={"Cost": st.column_config.NumberColumn(format="%.2f")})
-
-with calc_col3:
-    st.markdown("<div style='text-align: center; font-weight: bold; background-color: #f0f2f6; color: black; padding: 5px;'>Revenue</div>", unsafe_allow_html=True)
-    rev_df = pd.DataFrame({
-        "Item": ["Freight", "Demurrage", "TOTAL"],
-        "Amount": [0.0, 0.0, 0.0]
-    })
-    st.dataframe(rev_df, hide_index=True, use_container_width=True, column_config={"Amount": st.column_config.NumberColumn(format="%.2f")})
-    
-    st.markdown("<div style='text-align: center; font-weight: bold; background-color: #f0f2f6; color: black; padding: 5px;'>RESULT</div>", unsafe_allow_html=True)
-    res_df = pd.DataFrame({
-        "Metric": ["Total Revenue", "Total Op. Expens.", "Operational Profit", "Daily Profit", "R/C", "Net Daily Profit"],
-        "Value": [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
-    })
-    st.dataframe(res_df, hide_index=True, use_container_width=True, column_config={"Value": st.column_config.NumberColumn(format="%.2f")})
-    
-    st.write("")
-    st.metric(label="🎯 Break-even Freight", value="$ 26.50 / mt", delta="- Zarar Sınırı", delta_color="inverse")
-
-
-# =====================================================================
-# SENSITIVITY MATRIX (DUYARLILIK ANALİZİ)
-# =====================================================================
-st.divider()
-st.markdown("<h4 style='color: #c5a059; text-align: center;'>Strategic Sensitivity Analysis (Daily Profit)</h4>", unsafe_allow_html=True)
-
-# Örnek senaryo değerleri: Tam ortadaki Daily Profit $10,000 olacak şekilde geriye dönük hesaplanıyor
-base_f = freight if freight > 0 else 30.0 
-base_q = quantity if quantity > 0 else 10000.0
-dummy_days = 20.0 
-target_daily_profit = 10000.0
-
-# Formül: Günlük Kar 10.000$ olması için gereken gizli "Toplam Maliyet" (Cost) hesaplaması
-base_revenue = base_f * base_q
-dummy_cost = base_revenue - (target_daily_profit * dummy_days)
-
-def color_profit(val):
-    color = '#ff4b4b' if val < 0 else '#00cc96'
-    return f'color: {color}; font-weight: bold;'
-
-st.caption("**Matrix: Freight vs Cargo Quantity (9x9)**")
-f_vals = [base_f + i for i in range(-4, 5)] # Navlun (Düşey: 9 satır, 1 usd artış/azalış)
-q_vals = [base_q + (i * 100) for i in range(-4, 5)] # Yük (Yatay: 9 sütun, 100 mt artış/azalış)
-
-mat_data = []
-for f in f_vals:
-    row = []
-    for q in q_vals:
-        prof = ((f * q) - dummy_cost) / dummy_days
-        row.append(prof)
-    mat_data.append(row)
-    
-df_mat = pd.DataFrame(mat_data, index=[f"$ {x:.2f}" for x in f_vals], columns=[f"{x:,.0f} mt" for x in q_vals])
-styled_mat = df_mat.style.map(color_profit).format("$ {:,.0f}")
-
-st.dataframe(styled_mat, use_container_width=True)
+    bunker_calc_
