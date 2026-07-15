@@ -5,7 +5,7 @@ from datetime import datetime, date
 # Sayfa Yapılandırması
 st.set_page_config(page_title="Chartering Bridge", layout="wide")
 
-# CSS Ayarları (Kutu başlıkları siyah ve bold yapıldı)
+# CSS Ayarları
 st.markdown("""
     <style>
     .stNumberInput label { font-size: 13px !important; color: black !important; font-weight: bold !important; }
@@ -172,16 +172,19 @@ cp1, cp2, cp3, cp4, cp5 = st.columns(5)
 with cp1:
     account = st.text_input("Account", "TBN")
     cargo_item = st.text_input("Cargo Item", "Mineral")
+    stowage_factor = st.number_input("Stowage Factor (cuft/ton)", value=0.0, format="%.2f")
     quantity = st.number_input("Quantity", value=0.0, format="%.2f")
 with cp2:
     freight_term = st.selectbox("Freight Term", ["pmt", "lumpsum"])
     terms = st.selectbox("Terms", ["FIO", "FIOS", "FIOST", "LIFO", "FILO", "LILO"], index=2)
+    gear = st.selectbox("Gear", ["Geared", "Gearless"])
     laycan_date = st.date_input("Laycan", value=date.today(), format="DD.MM.YYYY")
     st.markdown(f"<span style='color:#c5a059; font-size:14px; font-weight:bold;'>{laycan_date.strftime('%d %B %Y, %A')}</span>", unsafe_allow_html=True)
 with cp3:
     freight = st.number_input("Freight", value=0.0, format="%.2f")
     demurrage = st.number_input("Demurrage", value=0.0, format="%.2f")
     despatch = st.number_input("Despatch", value=0.0, format="%.2f")
+    freight_tax = st.number_input("Freight Tax", value=0.0, format="%.2f")
 with cp4:
     extra_insurance = st.number_input("Extra Insurance", value=0.0, format="%.2f")
     cargo_survey = st.number_input("Cargo Survey", value=0.0, format="%.2f")
@@ -193,32 +196,95 @@ with cp5:
 
 st.write("")
 st.markdown("**Port Rotation**")
-if 'rotation_df' not in st.session_state:
-    st.session_state.rotation_df = pd.DataFrame({
-        "Port Rotation": ["Ballast Port", "Load Port", "Discharge Port"],
-        "Port Name": ["", "", ""],
-        "Rate": [0.0, 0.0, 0.0],
-        "Unit": ["mts/day", "mts/day", "mts/day"],
-        "L/D Terms": ["SSHEX", "SSHEX", "SSHEX"],
-        "Extra Days": [0.0, 0.0, 0.0],
-        "Distance": [0.0, 0.0, 0.0],
-        "PDA": [0.0, 0.0, 0.0]
+if 'port_rotation_df' not in st.session_state:
+    st.session_state.port_rotation_df = pd.DataFrame({
+        "Port Type": ["Ballast Port"],
+        "Port Name": [""],
+        "Distance": [0.0]
     })
 
 edited_rotation = st.data_editor(
-    st.session_state.rotation_df,
+    st.session_state.port_rotation_df,
     column_config={
-        "Port Rotation": st.column_config.SelectboxColumn("Port Rotation", options=["Ballast Port", "Load Port", "Discharge Port"], required=True),
-        "Port Name": st.column_config.TextColumn("Port Name"),
-        "Rate": st.column_config.NumberColumn("Rate", format="%.2f"),
-        "Unit": st.column_config.SelectboxColumn("Unit", options=["mts/day", "days", "ttl days"], required=True),
-        "L/D Terms": st.column_config.SelectboxColumn("L/D Terms", options=["SSHEX", "SSHINC", "SHEX", "SHINC", "FHEX", "FHINC"], required=True),
-        "Extra Days": st.column_config.NumberColumn("Extra Days", format="%.2f"),
-        "Distance": st.column_config.NumberColumn("Distance", format="%.2f"),
-        "PDA": st.column_config.NumberColumn("PDA", format="%.2f")
+        "Port Type": st.column_config.SelectboxColumn("**Port Type**", options=["Ballast Port", "Load Port", "Discharge Port", "Bunker Port", "Return Ballast"], required=True),
+        "Port Name": st.column_config.TextColumn("**Port Name**"),
+        "Distance": st.column_config.NumberColumn("**Distance**", format="%.2f")
     },
     hide_index=True, num_rows="dynamic", use_container_width=True, key="rotation_editor"
 )
+st.session_state.port_rotation_df = edited_rotation
+
+# ----- GET DISTANCE BUTONU VE VERİ AKTARIMI -----
+_, btn_col = st.columns([5, 1])
+with btn_col:
+    if st.button("Get Distance", type="primary", use_container_width=True):
+        st.toast("Mesafeler çekiliyor ve tablolar güncelleniyor...", icon="🔄")
+        
+        df = st.session_state.port_rotation_df
+        # Düzeltilmiş filtre: Sadece Load Port ve Discharge Port olanları aktar
+        filtered_df = df[df["Port Type"].isin(["Load Port", "Discharge Port"])]
+        
+        # Verileri Alt Tablolara Aktarma
+        if not filtered_df.empty:
+            st.session_state.port_charges_df = pd.DataFrame({
+                "Port Name": filtered_df["Port Name"].tolist(),
+                "PDA": [0.0] * len(filtered_df)
+            })
+            st.session_state.ld_details_df = pd.DataFrame({
+                "Port Type": filtered_df["Port Type"].tolist(),
+                "Port Name": filtered_df["Port Name"].tolist(),
+                "Rate": [0.0] * len(filtered_df),
+                "Unit": ["mts/day"] * len(filtered_df),
+                "L/D Terms": ["SSHEX"] * len(filtered_df),
+                "Extra Days": [0.0] * len(filtered_df)
+            })
+        else:
+            st.session_state.port_charges_df = pd.DataFrame({"Port Name": [""], "PDA": [0.0]})
+            st.session_state.ld_details_df = pd.DataFrame({"Port Type": [""], "Port Name": [""], "Rate": [0.0], "Unit": ["mts/day"], "L/D Terms": ["SSHEX"], "Extra Days": [0.0]})
+        
+        st.rerun()
+
+st.write("")
+col_t2, col_t3 = st.columns([1, 2]) 
+
+# ----- TABLO 2: PORT CHARGES -----
+with col_t2:
+    st.markdown("**Port Charges**")
+    if 'port_charges_df' not in st.session_state:
+        st.session_state.port_charges_df = pd.DataFrame({"Port Name": [""], "PDA": [0.0]})
+    
+    edited_charges = st.data_editor(
+        st.session_state.port_charges_df,
+        column_config={
+            "Port Name": st.column_config.TextColumn("**Port Name**"),
+            "PDA": st.column_config.NumberColumn("**PDA**", format="%.2f")
+        },
+        hide_index=True, num_rows="dynamic", use_container_width=True, key="charges_editor"
+    )
+    st.session_state.port_charges_df = edited_charges
+
+# ----- TABLO 3: L/D DETAILS -----
+with col_t3:
+    st.markdown("**L/D Details**")
+    if 'ld_details_df' not in st.session_state:
+        st.session_state.ld_details_df = pd.DataFrame({
+            "Port Type": [""], "Port Name": [""], "Rate": [0.0], "Unit": ["mts/day"], "L/D Terms": ["SSHEX"], "Extra Days": [0.0]
+        })
+    
+    edited_ld = st.data_editor(
+        st.session_state.ld_details_df,
+        column_config={
+            "Port Type": st.column_config.TextColumn("**Port Type**", disabled=True),
+            "Port Name": st.column_config.TextColumn("**Port Name**", disabled=True),
+            "Rate": st.column_config.NumberColumn("**Rate**", format="%.2f"),
+            "Unit": st.column_config.SelectboxColumn("**Unit**", options=["mts/day", "days", "ttl days"]),
+            "L/D Terms": st.column_config.SelectboxColumn("**L/D Terms**", options=["SSHEX", "SSHINC", "SHEX", "SHINC", "FHEX", "FHINC"]),
+            "Extra Days": st.column_config.NumberColumn("**Extra Days**", format="%.2f")
+        },
+        hide_index=True, num_rows="dynamic", use_container_width=True, key="ld_editor"
+    )
+    st.session_state.ld_details_df = edited_ld
+
 
 # =====================================================================
 # BÖLÜM 4: CALCULATION (GÖRSEL ŞABLON)
