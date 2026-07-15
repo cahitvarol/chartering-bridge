@@ -310,4 +310,89 @@ with calc_col1:
     ]
     calc_multi_columns = pd.MultiIndex.from_tuples(header_tuples)
     row_names = ["Ballast Port", "Steaming (Bal)", "Load Port", "Steaming (Ldn)", "Discharge Port", "Steaming (Return Ballast)", "Total"]
-    bunker_calc_
+    bunker_calc_df = pd.DataFrame(0.0, index=range(len(row_names)), columns=calc_multi_columns)
+    bunker_calc_df[(" ", "Port Rotation")] = row_names
+    st.dataframe(bunker_calc_df, hide_index=True, use_container_width=True)
+
+with calc_col2:
+    st.markdown("<div style='text-align: center; font-weight: bold; background-color: #f0f2f6; color: black; padding: 5px;'>Operational Expenses</div>", unsafe_allow_html=True)
+    op_exp_df = pd.DataFrame({
+        "Item": ["Bunker Expense", "Port Charges", "Freight Tax", "Liner IN", "Liner OUT", "Despatch", "Strait / Canal Exp.", "Extra Insurance", "Cargo Survey", "Other", "Add Comm.", "Brkg Comm.", "TOTAL"],
+        "Cost": [0.0] * 13
+    })
+    # Tablonun yüksekliği scrollbar (kaydırma çubuğu) çıkmaması için 520 piksel olarak sabitlendi
+    st.dataframe(op_exp_df, hide_index=True, use_container_width=True, height=520, column_config={"Cost": st.column_config.NumberColumn(format="%.2f")})
+
+with calc_col3:
+    st.markdown("<div style='text-align: center; font-weight: bold; background-color: #f0f2f6; color: black; padding: 5px;'>Revenue</div>", unsafe_allow_html=True)
+    rev_df = pd.DataFrame({
+        "Item": ["Freight", "Demurrage", "TOTAL"],
+        "Amount": [0.0, 0.0, 0.0]
+    })
+    st.dataframe(rev_df, hide_index=True, use_container_width=True, column_config={"Amount": st.column_config.NumberColumn(format="%.2f")})
+    
+    st.markdown("<div style='text-align: center; font-weight: bold; background-color: #f0f2f6; color: black; padding: 5px;'>RESULT</div>", unsafe_allow_html=True)
+    res_df = pd.DataFrame({
+        "Metric": ["Total Revenue", "Total Op. Expens.", "Operational Profit", "Daily Profit", "R/C", "Net Daily Profit"],
+        "Value": [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+    })
+    st.dataframe(res_df, hide_index=True, use_container_width=True, column_config={"Value": st.column_config.NumberColumn(format="%.2f")})
+    
+    st.write("")
+    st.metric(label="🎯 Break-even Freight", value="$ 26.50 / mt", delta="- Zarar Sınırı", delta_color="inverse")
+
+
+# =====================================================================
+# SENSITIVITY MATRIX (DUYARLILIK ANALİZİ)
+# =====================================================================
+st.divider()
+st.markdown("<h4 style='color: #c5a059; text-align: center;'>Strategic Sensitivity Analysis (Daily Profit)</h4>", unsafe_allow_html=True)
+
+# Örnek senaryo değerleri: Tam ortadaki Daily Profit $10,000 olacak şekilde hesaplama
+base_f = freight if freight > 0 else 30.0 
+base_q = quantity if quantity > 0 else 10000.0
+dummy_days = 20.0 
+target_daily_profit = 10000.0
+
+# Formül: Ortadaki kesişim değerinin her zaman hedef günlük kara (Örn: 10.000$) eşit olması için gereken gizli "Toplam Maliyet" (Cost)
+base_revenue = base_f * base_q
+dummy_cost = base_revenue - (target_daily_profit * dummy_days)
+
+f_vals = [base_f + i for i in range(-4, 5)] # Navlun (Düşey: 9 satır, 1 usd artış/azalış)
+q_vals = [base_q + (i * 100) for i in range(-4, 5)] # Yük (Yatay: 9 sütun, 100 mt artış/azalış)
+
+mat_data = []
+for f in f_vals:
+    row = []
+    for q in q_vals:
+        prof = ((f * q) - dummy_cost) / dummy_days
+        row.append(prof)
+    mat_data.append(row)
+    
+df_mat = pd.DataFrame(mat_data, index=[f"$ {x:.2f}" for x in f_vals], columns=[f"{x:,.0f} mt" for x in q_vals])
+
+# Strateji tablosunun ortasındaki hedef satır ve sütunu (crosshair) renklendirme
+def style_matrix(df):
+    style_df = pd.DataFrame('', index=df.index, columns=df.columns)
+    
+    # 9x9 matriste tam orta indeks (4. indeks)
+    mid_row = df.index[4]
+    mid_col = df.columns[4]
+    
+    for r in df.index:
+        for c in df.columns:
+            val = df.loc[r, c]
+            text_color = '#ff4b4b' if val < 0 else '#00cc96' # Eksi kırmızı, Artı yeşil
+            
+            bg_color = ''
+            if r == mid_row or c == mid_col:
+                bg_color = 'background-color: rgba(59, 130, 246, 0.2); ' # Hedef hattı için hafif şeffaf mavi
+            
+            style_df.loc[r, c] = f'color: {text_color}; font-weight: bold; {bg_color}'
+            
+    return style_df
+
+# Tabloya formatlama ve stili uygulama
+styled_mat = df_mat.style.apply(style_matrix, axis=None).format("$ {:,.0f}")
+
+st.dataframe(styled_mat, use_container_width=True)
