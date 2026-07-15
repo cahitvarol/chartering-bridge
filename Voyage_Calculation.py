@@ -134,7 +134,7 @@ with sc1:
             "Cons": [0.0, 0.0],
             "Select": ["MGO %0,1", "MGO %0,1"]
         })
-    st.session_state.sea_df = st.data_editor(
+    edited_sea = st.data_editor(
         st.session_state.sea_df, 
         column_config={
             "At Sea": st.column_config.TextColumn("At Sea"),
@@ -152,7 +152,7 @@ with sc2:
             "Cons": [0.2, 0.2],
             "Select": ["MGO %0,1", "MGO %0,1"]
         })
-    st.session_state.port_df = st.data_editor(
+    edited_port = st.data_editor(
         st.session_state.port_df, 
         column_config={
             "At Port": st.column_config.TextColumn("At Port"),
@@ -205,8 +205,7 @@ if 'port_rotation_df' not in st.session_state:
         "Distance": [0.0]
     })
 
-# "double enter" ve gecikme sorununu aşmak için değişkeni doğrudan session_state'e bağlıyoruz
-st.session_state.port_rotation_df = st.data_editor(
+edited_rotation = st.data_editor(
     st.session_state.port_rotation_df,
     column_config={
         "Port Type": st.column_config.SelectboxColumn("**Port Type**", options=["Ballast Port", "Load Port", "Discharge Port", "Bunker Port", "Return Ballast"], required=True),
@@ -222,9 +221,11 @@ with btn_col:
     if st.button("Get Distance", type="primary", use_container_width=True):
         st.toast("Mesafeler çekiliyor ve tablolar güncelleniyor...", icon="🔄")
         
-        df = st.session_state.port_rotation_df
+        # Güncel düzenlenmiş veriyi alıyoruz
+        df = edited_rotation 
         filtered_df = df[df["Port Type"].isin(["Load Port", "Discharge Port"])]
         
+        # Verileri Alt Tablolara Aktarma
         if not filtered_df.empty:
             st.session_state.port_charges_df = pd.DataFrame({
                 "Port Name": filtered_df["Port Name"].tolist(),
@@ -242,6 +243,12 @@ with btn_col:
             st.session_state.port_charges_df = pd.DataFrame({"Port Name": [""], "PDA": [0.0]})
             st.session_state.ld_details_df = pd.DataFrame({"Port Type": [""], "Port Name": [""], "Rate": [0.0], "Unit": ["mts/day"], "L/D Terms": ["SSHEX"], "Extra Days": [0.0]})
         
+        # Alt tabloların arayüzdeki çerez (cache) hafızasını temizliyoruz
+        if "charges_editor_main" in st.session_state:
+            del st.session_state["charges_editor_main"]
+        if "ld_editor_main" in st.session_state:
+            del st.session_state["ld_editor_main"]
+            
         st.rerun()
 
 st.write("")
@@ -253,7 +260,7 @@ with col_t2:
     if 'port_charges_df' not in st.session_state:
         st.session_state.port_charges_df = pd.DataFrame({"Port Name": [""], "PDA": [0.0]})
     
-    st.session_state.port_charges_df = st.data_editor(
+    edited_charges = st.data_editor(
         st.session_state.port_charges_df,
         column_config={
             "Port Name": st.column_config.TextColumn("**Port Name**"),
@@ -270,7 +277,7 @@ with col_t3:
             "Port Type": [""], "Port Name": [""], "Rate": [0.0], "Unit": ["mts/day"], "L/D Terms": ["SSHEX"], "Extra Days": [0.0]
         })
     
-    st.session_state.ld_details_df = st.data_editor(
+    edited_ld = st.data_editor(
         st.session_state.ld_details_df,
         column_config={
             "Port Type": st.column_config.TextColumn("**Port Type**", disabled=True),
