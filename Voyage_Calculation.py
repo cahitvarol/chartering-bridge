@@ -82,14 +82,6 @@ with col_button:
         st.session_state.bunker_df.loc[st.session_state.bunker_df["Liman"] == "Istanbul", ["MGO %0,10", "ULSFO %0,10", "VLSFO %0,50", "IFO 380 %3,50"]] = [1090.0, 850.0, 680.0, 610.0]
         st.rerun()
 
-secili_satirlar = st.session_state.bunker_df[st.session_state.bunker_df["Seç"] == True]
-if not secili_satirlar.empty:
-    aktif_liman = secili_satirlar.iloc[0]["Liman"]
-    st.caption(f"Aktif Liman: **{aktif_liman}**")
-else:
-    st.warning("Lütfen yakıt alınacak en az bir limanı seçin!")
-
-
 # =====================================================================
 # BÖLÜM 2: VESSEL DETAILS
 # =====================================================================
@@ -144,39 +136,29 @@ with sc2:
         })
     edited_port = st.data_editor(st.session_state.port_df, hide_index=True, use_container_width=True, key="port_editor")
 
-
 # =====================================================================
 # BÖLÜM 3: C/P DETAILS
 # =====================================================================
 st.markdown('<p class="main-header">3 - C/P Details</p>', unsafe_allow_html=True)
 
 cp1, cp2, cp3, cp4, cp5 = st.columns(5)
-
 with cp1:
     account = st.text_input("Account", "TBN")
     cargo_item = st.text_input("Cargo Item", "Mineral")
     quantity = st.number_input("Quantity", value=0.0)
-
 with cp2:
     freight_term = st.selectbox("Freight Term", ["pmt", "lumpsum"])
-    # Terimler güncellendi ve varsayılan değer 2. indeks olan FIOST yapıldı (0'dan başlar: 0,1,2)
     terms = st.selectbox("Terms", ["FIO", "FIOS", "FIOST", "LIFO", "FILO", "LILO"], index=2)
-    
-    # Laycan takvimi eklendi
     laycan_date = st.date_input("Laycan", value=date.today())
-    # Seçilen tarih İngilizce gün ismiyle gösteriliyor (Örn: 14 July 2026, Tuesday)
     st.markdown(f"<span style='color:#c5a059; font-size:14px; font-weight:bold;'>{laycan_date.strftime('%d %B %Y, %A')}</span>", unsafe_allow_html=True)
-
 with cp3:
     freight = st.number_input("Freight", value=0.0)
     demurrage = st.number_input("Demurrage", value=0.0)
     despatch = st.number_input("Despatch", value=0.0)
-
 with cp4:
     extra_insurance = st.number_input("Extra Insurance", value=0.0)
     cargo_survey = st.number_input("Cargo Survey", value=0.0)
     strait_canal = st.number_input("Strait / Canal Passage Expenses", value=0.0)
-
 with cp5:
     add_comm = st.number_input("Address Commission (%)", value=0.0, step=0.25)
     broker_comm = st.number_input("Brokerage Commission (%)", value=0.0, step=0.25)
@@ -184,46 +166,103 @@ with cp5:
 
 st.write("")
 st.markdown("**Port Rotation**")
-
 if 'rotation_df' not in st.session_state:
     st.session_state.rotation_df = pd.DataFrame({
         "Port Rotation": ["Ballast Port", "Load Port", "Discharge Port"],
         "Port Name": ["", "", ""],
         "Rate": [0.0, 0.0, 0.0],
-        "Unit": ["mts/day", "mts/day", "mts/day"],            # Başlık güncellendi
-        "L/D Terms": ["SSHEX", "SSHEX", "SSHEX"],             # Yeni sütun eklendi
-        "Extra Days": [0.0, 0.0, 0.0],                        # Yeni sütun eklendi
+        "Unit": ["mts/day", "mts/day", "mts/day"],
+        "L/D Terms": ["SSHEX", "SSHEX", "SSHEX"],
+        "Extra Days": [0.0, 0.0, 0.0],
         "Distance": [0.0, 0.0, 0.0],
-        "PDA": [0.0, 0.0, 0.0]                                # Yeni sütun eklendi
+        "PDA": [0.0, 0.0, 0.0]
     })
 
-# Sütun ayarları
 edited_rotation = st.data_editor(
     st.session_state.rotation_df,
     column_config={
-        "Port Rotation": st.column_config.SelectboxColumn(
-            "Port Rotation",
-            options=["Ballast Port", "Load Port", "Discharge Port"],
-            required=True
-        ),
+        "Port Rotation": st.column_config.SelectboxColumn("Port Rotation", options=["Ballast Port", "Load Port", "Discharge Port"], required=True),
         "Port Name": st.column_config.TextColumn("Port Name"),
         "Rate": st.column_config.NumberColumn("Rate", format="%.2f"),
-        "Unit": st.column_config.SelectboxColumn(
-            "Unit",
-            options=["mts/day", "days", "ttl days"],
-            required=True
-        ),
-        "L/D Terms": st.column_config.SelectboxColumn(
-            "L/D Terms",
-            options=["SSHEX", "SSHINC", "SHEX", "SHINC", "FHEX", "FHINC"],
-            required=True
-        ),
+        "Unit": st.column_config.SelectboxColumn("Unit", options=["mts/day", "days", "ttl days"], required=True),
+        "L/D Terms": st.column_config.SelectboxColumn("L/D Terms", options=["SSHEX", "SSHINC", "SHEX", "SHINC", "FHEX", "FHINC"], required=True),
         "Extra Days": st.column_config.NumberColumn("Extra Days", format="%.2f"),
         "Distance": st.column_config.NumberColumn("Distance", format="%.2f"),
         "PDA": st.column_config.NumberColumn("PDA", format="$ %.2f")
     },
-    hide_index=True,
-    num_rows="dynamic",
-    use_container_width=True,
-    key="rotation_editor"
+    hide_index=True, num_rows="dynamic", use_container_width=True, key="rotation_editor"
 )
+
+
+# =====================================================================
+# BÖLÜM 4: CALCULATION (GÖRSEL ŞABLON)
+# =====================================================================
+st.markdown('<p class="main-header">4 - Calculation</p>', unsafe_allow_html=True)
+
+# Ekranı Excel görselindeki gibi 3 ana bloka (Sütuna) bölüyoruz
+calc_col1, calc_col2, calc_col3 = st.columns([2.5, 1.2, 1.2])
+
+# ----- 1. BLOK: YAKIT VE SÜRE TABLOSU -----
+with calc_col1:
+    # MultiIndex ile iç içe geçmiş başlıkları oluşturuyoruz
+    header_tuples = [
+        ("Port Rotation", ""), ("Duration", ""),
+        ("MGO", "mts"), ("MGO", "Cost"),
+        ("ULSFO", "mts"), ("ULSFO", "Cost"),
+        ("VLSFO", "mts"), ("VLSFO", "Cost"),
+        ("IFO380", "mts"), ("IFO380", "Cost")
+    ]
+    calc_multi_columns = pd.MultiIndex.from_tuples(header_tuples)
+    
+    # Satır isimleri
+    row_names = ["Ballast Port", "Steaming (Bal)", "Load Port", "Steaming (Ldn)", "Discharge Port", "Total"]
+    
+    # Sıfırlarla dolu boş bir tablo yaratıyoruz
+    bunker_calc_df = pd.DataFrame(0.0, index=range(len(row_names)), columns=calc_multi_columns)
+    bunker_calc_df[("Port Rotation", "")] = row_names
+    
+    st.dataframe(bunker_calc_df, hide_index=True, use_container_width=True)
+
+# ----- 2. BLOK: OPERATIONAL EXPENSES -----
+with calc_col2:
+    st.markdown("<div style='text-align: center; font-weight: bold; background-color: #f0f2f6; color: black; padding: 5px;'>Operational Expenses</div>", unsafe_allow_html=True)
+    op_exp_df = pd.DataFrame({
+        "Item": ["Bunker Expense", "Port Charges", "Despatch", "Strait / Canal Exp.", "Extra Insurance", "Cargo Survey", "Other", "Add Comm.", "Brkg Comm.", "TOTAL"],
+        "Cost": [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+    })
+    
+    # Çıktı tablosu olduğu için sadece st.dataframe kullanıyoruz (data_editor değil)
+    st.dataframe(
+        op_exp_df, 
+        hide_index=True, 
+        use_container_width=True,
+        column_config={"Cost": st.column_config.NumberColumn(format="$ %.2f")}
+    )
+
+# ----- 3. BLOK: REVENUE VE RESULT -----
+with calc_col3:
+    st.markdown("<div style='text-align: center; font-weight: bold; background-color: #f0f2f6; color: black; padding: 5px;'>Revenue</div>", unsafe_allow_html=True)
+    rev_df = pd.DataFrame({
+        "Item": ["Freight", "Demurrage", "TOTAL"],
+        "Amount": [0.0, 0.0, 0.0]
+    })
+    st.dataframe(
+        rev_df, 
+        hide_index=True, 
+        use_container_width=True,
+        column_config={"Amount": st.column_config.NumberColumn(format="$ %.2f")}
+    )
+    
+    st.write("") # Boşluk
+    
+    st.markdown("<div style='text-align: center; font-weight: bold; background-color: #f0f2f6; color: black; padding: 5px;'>RESULT</div>", unsafe_allow_html=True)
+    res_df = pd.DataFrame({
+        "Metric": ["Total Revenue", "Total Op. Expens.", "Operational Profit", "Daily Profit", "R/C", "Net Daily Profit"],
+        "Value": [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+    })
+    st.dataframe(
+        res_df, 
+        hide_index=True, 
+        use_container_width=True,
+        column_config={"Value": st.column_config.NumberColumn(format="$ %.2f")}
+    )
