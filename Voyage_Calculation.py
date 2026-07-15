@@ -225,9 +225,12 @@ with btn_col:
         filtered_df = df[df["Port Type"].isin(["Load Port", "Discharge Port"])]
         
         if not filtered_df.empty:
+            # Port Charges tablosuna 'Port Type' ve 'Liner Expenses' eklendi
             st.session_state.port_charges_df = pd.DataFrame({
+                "Port Type": filtered_df["Port Type"].tolist(),
                 "Port Name": filtered_df["Port Name"].tolist(),
-                "PDA": [0.0] * len(filtered_df)
+                "PDA": [0.0] * len(filtered_df),
+                "Liner Expenses": [0.0] * len(filtered_df)
             })
             st.session_state.ld_details_df = pd.DataFrame({
                 "Port Type": filtered_df["Port Type"].tolist(),
@@ -238,7 +241,7 @@ with btn_col:
                 "Extra Days": [0.0] * len(filtered_df)
             })
         else:
-            st.session_state.port_charges_df = pd.DataFrame({"Port Name": [""], "PDA": [0.0]})
+            st.session_state.port_charges_df = pd.DataFrame({"Port Type": [""], "Port Name": [""], "PDA": [0.0], "Liner Expenses": [0.0]})
             st.session_state.ld_details_df = pd.DataFrame({"Port Type": [""], "Port Name": [""], "Rate": [0.0], "Unit": ["mts/day"], "L/D Terms": ["SSHEX"], "Extra Days": [0.0]})
         
         if "charges_editor_main" in st.session_state:
@@ -249,19 +252,21 @@ with btn_col:
         st.rerun()
 
 st.write("")
-col_t2, col_t3 = st.columns([1, 2]) 
+col_t2, col_t3 = st.columns([1.2, 1.8]) 
 
 # ----- TABLO 2: PORT CHARGES -----
 with col_t2:
     st.markdown("**Port Charges**")
     if 'port_charges_df' not in st.session_state:
-        st.session_state.port_charges_df = pd.DataFrame({"Port Name": [""], "PDA": [0.0]})
+        st.session_state.port_charges_df = pd.DataFrame({"Port Type": [""], "Port Name": [""], "PDA": [0.0], "Liner Expenses": [0.0]})
     
     st.session_state.port_charges_df = st.data_editor(
         st.session_state.port_charges_df,
         column_config={
+            "Port Type": st.column_config.TextColumn("**Port Type**", disabled=True),
             "Port Name": st.column_config.TextColumn("**Port Name**"),
-            "PDA": st.column_config.NumberColumn("**PDA**", format="%.2f")
+            "PDA": st.column_config.NumberColumn("**PDA**", format="%.2f"),
+            "Liner Expenses": st.column_config.NumberColumn("**Liner Expenses**", format="%.2f")
         },
         hide_index=True, num_rows="dynamic", use_container_width=True, key="charges_editor_main"
     )
@@ -296,24 +301,29 @@ st.markdown('<p class="main-header">4 - Calculation & Strategy</p>', unsafe_allo
 calc_col1, calc_col2, calc_col3 = st.columns([2.5, 1.2, 1.2])
 
 with calc_col1:
+    # Voyage Summary olarak güncellendi ve başlıklar alt hücrelere alındı
+    st.markdown("<div style='text-align: center; font-weight: bold; background-color: #f0f2f6; color: black; padding: 5px;'>Voyage Summary</div>", unsafe_allow_html=True)
     header_tuples = [
-        ("Port Rotation", ""), ("Duration", ""),
+        (" ", "Port Rotation"), (" ", "Duration"),
         ("MGO", "mts"), ("MGO", "Cost"),
         ("ULSFO", "mts"), ("ULSFO", "Cost"),
         ("VLSFO", "mts"), ("VLSFO", "Cost"),
         ("IFO380", "mts"), ("IFO380", "Cost")
     ]
     calc_multi_columns = pd.MultiIndex.from_tuples(header_tuples)
-    row_names = ["Ballast Port", "Steaming (Bal)", "Load Port", "Steaming (Ldn)", "Discharge Port", "Total"]
+    
+    # "Steaming (Return Ballast)" satırı Total'den önce eklendi
+    row_names = ["Ballast Port", "Steaming (Bal)", "Load Port", "Steaming (Ldn)", "Discharge Port", "Steaming (Return Ballast)", "Total"]
     bunker_calc_df = pd.DataFrame(0.0, index=range(len(row_names)), columns=calc_multi_columns)
-    bunker_calc_df[("Port Rotation", "")] = row_names
+    bunker_calc_df[(" ", "Port Rotation")] = row_names
     st.dataframe(bunker_calc_df, hide_index=True, use_container_width=True)
 
 with calc_col2:
     st.markdown("<div style='text-align: center; font-weight: bold; background-color: #f0f2f6; color: black; padding: 5px;'>Operational Expenses</div>", unsafe_allow_html=True)
     op_exp_df = pd.DataFrame({
-        "Item": ["Bunker Expense", "Port Charges", "Despatch", "Strait / Canal Exp.", "Extra Insurance", "Cargo Survey", "Other", "Add Comm.", "Brkg Comm.", "TOTAL"],
-        "Cost": [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+        # Freight Tax, Liner IN ve Liner OUT kalemleri Port Charges altına eklendi
+        "Item": ["Bunker Expense", "Port Charges", "Freight Tax", "Liner IN", "Liner OUT", "Despatch", "Strait / Canal Exp.", "Extra Insurance", "Cargo Survey", "Other", "Add Comm.", "Brkg Comm.", "TOTAL"],
+        "Cost": [0.0] * 13
     })
     st.dataframe(op_exp_df, hide_index=True, use_container_width=True, column_config={"Cost": st.column_config.NumberColumn(format="%.2f")})
 
@@ -332,64 +342,43 @@ with calc_col3:
     })
     st.dataframe(res_df, hide_index=True, use_container_width=True, column_config={"Value": st.column_config.NumberColumn(format="%.2f")})
     
-    # --- YENİ: BREAK-EVEN (BAŞA BAŞ) GÖSTERGESİ ---
     st.write("")
-    st.metric(label="🎯 Break-even Freight (Başa Baş Noktası)", value="$ 26.50 / mt", delta="- Zarar Sınırı", delta_color="inverse")
+    st.metric(label="🎯 Break-even Freight", value="$ 26.50 / mt", delta="- Zarar Sınırı", delta_color="inverse")
 
 
 # =====================================================================
 # SENSITIVITY MATRIX (DUYARLILIK ANALİZİ)
 # =====================================================================
 st.divider()
-st.markdown("<h4 style='color: #c5a059;'>Strategic Sensitivity Analysis (Daily Profit)</h4>", unsafe_allow_html=True)
+st.markdown("<h4 style='color: #c5a059; text-align: center;'>Strategic Sensitivity Analysis (Daily Profit)</h4>", unsafe_allow_html=True)
 
-# Görsel şablon için varsayılan örnek değerler (İleride formüle bağlanacak)
+# Örnek senaryo değerleri: Tam ortadaki Daily Profit $10,000 olacak şekilde geriye dönük hesaplanıyor
 base_f = freight if freight > 0 else 30.0 
 base_q = quantity if quantity > 0 else 10000.0
-base_b = 610.0 # Örnek yakıt (VLSFO)
-dummy_cost = 260000.0 # Örnek Toplam Gider
-dummy_days = 20.0 # Örnek Toplam Sefer Günü
+dummy_days = 20.0 
+target_daily_profit = 10000.0
 
-mat_col1, mat_col2 = st.columns([1, 1.5])
+# Formül: Günlük Kar 10.000$ olması için gereken gizli "Toplam Maliyet" (Cost) hesaplaması
+base_revenue = base_f * base_q
+dummy_cost = base_revenue - (target_daily_profit * dummy_days)
 
-# Renklendirme fonksiyonu (Eksi değerler kırmızı, artılar yeşil)
 def color_profit(val):
     color = '#ff4b4b' if val < 0 else '#00cc96'
     return f'color: {color}; font-weight: bold;'
 
-with mat_col1:
-    st.caption("**Matrix 1: Freight vs Bunker Price (5x5)**")
-    f_vals_1 = [base_f + i for i in range(-2, 3)] # Navlun (Düşey: -2, -1, 0, +1, +2)
-    b_vals_1 = [base_b + (i * 30) for i in range(-2, 3)] # Yakıt (Yatay: 30 usd artış/azalış)
-    
-    mat1_data = []
-    for f in f_vals_1:
-        row = []
-        for b in b_vals_1:
-            # Örnek hesaplama: Yakıt arttıkça gider artar (Tonaj varsayımı), Navlun x Yük = Gelir
-            prof = ((f * base_q) - (dummy_cost + (b-base_b)*300)) / dummy_days 
-            row.append(prof)
-        mat1_data.append(row)
-        
-    df_m1 = pd.DataFrame(mat1_data, index=[f"$ {x:.2f}" for x in f_vals_1], columns=[f"Bunker: ${x:,.0f}" for x in b_vals_1])
-    # Pandas stil uygulaması (st.dataframe bunu otomatik algılar)
-    styled_m1 = df_m1.style.map(color_profit).format("$ {:,.0f}")
-    st.dataframe(styled_m1, use_container_width=True)
+st.caption("**Matrix: Freight vs Cargo Quantity (9x9)**")
+f_vals = [base_f + i for i in range(-4, 5)] # Navlun (Düşey: 9 satır, 1 usd artış/azalış)
+q_vals = [base_q + (i * 100) for i in range(-4, 5)] # Yük (Yatay: 9 sütun, 100 mt artış/azalış)
 
-with mat_col2:
-    st.caption("**Matrix 2: Freight vs Cargo Quantity (9x9)**")
-    f_vals_2 = [base_f + i for i in range(-4, 5)] # Navlun (Düşey: 9 satır, 1 usd artış)
-    q_vals_2 = [base_q + (i * 100) for i in range(-4, 5)] # Yük (Yatay: 9 sütun, 100 mt artış)
+mat_data = []
+for f in f_vals:
+    row = []
+    for q in q_vals:
+        prof = ((f * q) - dummy_cost) / dummy_days
+        row.append(prof)
+    mat_data.append(row)
     
-    mat2_data = []
-    for f in f_vals_2:
-        row = []
-        for q in q_vals_2:
-            # Örnek hesaplama: Net Gelir - Gider / Gün
-            prof = ((f * q) - dummy_cost) / dummy_days
-            row.append(prof)
-        mat2_data.append(row)
-        
-    df_m2 = pd.DataFrame(mat2_data, index=[f"$ {x:.2f}" for x in f_vals_2], columns=[f"{x:,.0f} mt" for x in q_vals_2])
-    styled_m2 = df_m2.style.map(color_profit).format("$ {:,.0f}")
-    st.dataframe(styled_m2, use_container_width=True)
+df_mat = pd.DataFrame(mat_data, index=[f"$ {x:.2f}" for x in f_vals], columns=[f"{x:,.0f} mt" for x in q_vals])
+styled_mat = df_mat.style.map(color_profit).format("$ {:,.0f}")
+
+st.dataframe(styled_mat, use_container_width=True)
