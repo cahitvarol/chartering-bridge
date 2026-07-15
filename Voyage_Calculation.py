@@ -5,14 +5,14 @@ from datetime import datetime, date
 # Sayfa Yapılandırması
 st.set_page_config(page_title="Chartering Bridge", layout="wide")
 
-# CSS Ayarları (Hizalamalar ve Başlıklar İçin)
+# CSS Ayarları (Kutu başlıkları siyah ve bold yapıldı)
 st.markdown("""
     <style>
-    .stNumberInput label { font-size: 13px !important; color: #fff !important; font-weight: bold !important; }
-    .stTextInput label { font-size: 13px !important; color: #fff !important; font-weight: bold !important; }
-    .stSelectbox label { font-size: 13px !important; color: #fff !important; font-weight: bold !important; }
+    .stNumberInput label { font-size: 13px !important; color: black !important; font-weight: bold !important; }
+    .stTextInput label { font-size: 13px !important; color: black !important; font-weight: bold !important; }
+    .stSelectbox label { font-size: 13px !important; color: black !important; font-weight: bold !important; }
     .main-header { font-size: 22px; font-weight: bold; margin-bottom: 10px; border-bottom: 2px solid #f0f2f6; padding-top: 20px;}
-    .align-text { margin-top: 8px; font-weight: bold; font-size: 14px; }
+    .align-text { margin-top: 8px; font-weight: bold; font-size: 14px; color: black; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -29,14 +29,12 @@ col_left, col_right = st.columns([1.5, 3])
 with col_left:
     st.write("") 
     
-    # st.info yerine HTML kullanarak kutuların dikey hizalamasını eşitledik
     v_id_col1, v_id_col2 = st.columns([1, 1.5])
     with v_id_col1: st.markdown("<div class='align-text'>Voyage ID No</div>", unsafe_allow_html=True)
     with v_id_col2: voyage_id = st.text_input("", value="2026-001", label_visibility="collapsed")
     
     date_col1, date_col2 = st.columns([1, 1.5])
     with date_col1: st.markdown("<div class='align-text'>Date</div>", unsafe_allow_html=True)
-    # Tarih formatı DD.MM.YYYY olarak güncellendi
     with date_col2: voyage_date = st.date_input("", value=datetime(2026, 7, 14), format="DD.MM.YYYY", label_visibility="collapsed")
     
     curr_col1, curr_col2 = st.columns([1, 1.5])
@@ -49,28 +47,27 @@ with col_right:
         st.session_state.bunker_df = pd.DataFrame({
             "Seç": [True, False, False, False],
             "Liman": ["Istanbul", "Gibraltar", "3rd Port", "4th Port"],
-            "MGO %0,10": [1050.0, 1020.0, 0.0, 0.0],
-            "ULSFO %0,10": [820.0, 790.0, 0.0, 0.0],
-            "VLSFO %0,50": [640.0, 610.0, 0.0, 0.0],
-            "IFO 380 %3,50": [580.0, 550.0, 0.0, 0.0]
+            "MGO %0,1": [1050.0, 1020.0, 0.0, 0.0],
+            "ULSFO %0,1": [820.0, 790.0, 0.0, 0.0],
+            "VLSFO %0,5": [640.0, 610.0, 0.0, 0.0],
+            "IFO380 %3,5": [580.0, 550.0, 0.0, 0.0]
         })
 
     edited_df = st.data_editor(
         st.session_state.bunker_df,
         column_config={
-            "Seç": st.column_config.CheckboxColumn("**Seç**", default=False, width="small"),
-            "Liman": st.column_config.TextColumn("**Liman**", width="medium"),
-            "MGO %0,10": st.column_config.NumberColumn("**MGO %0,10**", format="%.2f"),
-            "ULSFO %0,10": st.column_config.NumberColumn("**ULSFO %0,10**", format="%.2f"),
-            "VLSFO %0,50": st.column_config.NumberColumn("**VLSFO %0,50**", format="%.2f"),
-            "IFO 380 %3,50": st.column_config.NumberColumn("**IFO 380 %3,50**", format="%.2f"),
+            "Seç": st.column_config.CheckboxColumn("Seç", default=False, width="small"),
+            "Liman": st.column_config.TextColumn("Liman", width="medium"),
+            "MGO %0,1": st.column_config.NumberColumn("MGO %0,1", format="%.2f"),
+            "ULSFO %0,1": st.column_config.NumberColumn("ULSFO %0,1", format="%.2f"),
+            "VLSFO %0,5": st.column_config.NumberColumn("VLSFO %0,5", format="%.2f"),
+            "IFO380 %3,5": st.column_config.NumberColumn("IFO380 %3,5", format="%.2f"),
         },
         hide_index=True,
         use_container_width=True,
         key="bunker_editor"
     )
     
-    # Akıllı Seçim Döngüsü
     prev_selections = st.session_state.bunker_df["Seç"].tolist()
     curr_selections = edited_df["Seç"].tolist()
     changed_to_true = [i for i, (p, c) in enumerate(zip(prev_selections, curr_selections)) if not p and c]
@@ -83,12 +80,11 @@ with col_right:
     else:
         st.session_state.bunker_df = edited_df
 
-    # Butonu tablonun altına ve sağ tarafa (yarı boyutta) hizaladık
     btn_col_empty, btn_col_actual = st.columns([1, 1])
     with btn_col_actual:
         if st.button("Update Bunker Prices", type="primary", use_container_width=True):
             st.toast("Güncel fiyatlar çekiliyor...", icon="⛽")
-            st.session_state.bunker_df.loc[st.session_state.bunker_df["Liman"] == "Istanbul", ["MGO %0,10", "ULSFO %0,10", "VLSFO %0,50", "IFO 380 %3,50"]] = [1090.0, 850.0, 680.0, 610.0]
+            st.session_state.bunker_df.loc[st.session_state.bunker_df["Liman"] == "Istanbul", ["MGO %0,1", "ULSFO %0,1", "VLSFO %0,5", "IFO380 %3,5"]] = [1090.0, 850.0, 680.0, 610.0]
             st.rerun()
 
 secili_satirlar = st.session_state.bunker_df[st.session_state.bunker_df["Seç"] == True]
@@ -102,7 +98,6 @@ if not secili_satirlar.empty:
 # =====================================================================
 st.markdown('<p class="main-header">2 - Vessel Details</p>', unsafe_allow_html=True)
 
-# Başlıklar CSS ayarımız sayesinde otomatik olarak Bold görünecek
 v1, v2, v3, v4, v5, v6 = st.columns(6)
 with v1:
     imo = st.text_input("IMO", "")
@@ -131,7 +126,6 @@ sc1, sc2 = st.columns([1.2, 1])
 
 yakit_tipleri = ["MGO %0,1", "ULSFO %0,1", "VLSFO %0,5", "IFO380 %3,5"]
 
-# YENİ DENİZ TABLOSU (Knot ve Mts eklemeli)
 with sc1:
     if 'sea_df' not in st.session_state:
         st.session_state.sea_df = pd.DataFrame({
@@ -143,15 +137,14 @@ with sc1:
     edited_sea = st.data_editor(
         st.session_state.sea_df, 
         column_config={
-            "At Sea": st.column_config.TextColumn("**At Sea**"),
-            "Speed": st.column_config.NumberColumn("**Speed**", format="%.2f knot"),
-            "Cons": st.column_config.NumberColumn("**Cons**", format="%.2f mts"),
-            "Select": st.column_config.SelectboxColumn("**Select**", options=yakit_tipleri)
+            "At Sea": st.column_config.TextColumn("At Sea"),
+            "Speed": st.column_config.NumberColumn("Speed", format="%.2f knot"),
+            "Cons": st.column_config.NumberColumn("Cons", format="%.2f mts"),
+            "Select": st.column_config.SelectboxColumn("Select", options=yakit_tipleri)
         },
         hide_index=True, use_container_width=True, key="sea_editor"
     )
 
-# YENİ LİMAN TABLOSU (Mts eklemeli)
 with sc2:
     if 'port_df' not in st.session_state:
         st.session_state.port_df = pd.DataFrame({
@@ -162,9 +155,9 @@ with sc2:
     edited_port = st.data_editor(
         st.session_state.port_df, 
         column_config={
-            "At Port": st.column_config.TextColumn("**At Port**"),
-            "Cons": st.column_config.NumberColumn("**Cons**", format="%.2f mts"),
-            "Select": st.column_config.SelectboxColumn("**Select**", options=yakit_tipleri)
+            "At Port": st.column_config.TextColumn("At Port"),
+            "Cons": st.column_config.NumberColumn("Cons", format="%.2f mts"),
+            "Select": st.column_config.SelectboxColumn("Select", options=yakit_tipleri)
         },
         hide_index=True, use_container_width=True, key="port_editor"
     )
@@ -215,14 +208,14 @@ if 'rotation_df' not in st.session_state:
 edited_rotation = st.data_editor(
     st.session_state.rotation_df,
     column_config={
-        "Port Rotation": st.column_config.SelectboxColumn("**Port Rotation**", options=["Ballast Port", "Load Port", "Discharge Port"], required=True),
-        "Port Name": st.column_config.TextColumn("**Port Name**"),
-        "Rate": st.column_config.NumberColumn("**Rate**", format="%.2f"),
-        "Unit": st.column_config.SelectboxColumn("**Unit**", options=["mts/day", "days", "ttl days"], required=True),
-        "L/D Terms": st.column_config.SelectboxColumn("**L/D Terms**", options=["SSHEX", "SSHINC", "SHEX", "SHINC", "FHEX", "FHINC"], required=True),
-        "Extra Days": st.column_config.NumberColumn("**Extra Days**", format="%.2f"),
-        "Distance": st.column_config.NumberColumn("**Distance**", format="%.2f"),
-        "PDA": st.column_config.NumberColumn("**PDA**", format="%.2f")
+        "Port Rotation": st.column_config.SelectboxColumn("Port Rotation", options=["Ballast Port", "Load Port", "Discharge Port"], required=True),
+        "Port Name": st.column_config.TextColumn("Port Name"),
+        "Rate": st.column_config.NumberColumn("Rate", format="%.2f"),
+        "Unit": st.column_config.SelectboxColumn("Unit", options=["mts/day", "days", "ttl days"], required=True),
+        "L/D Terms": st.column_config.SelectboxColumn("L/D Terms", options=["SSHEX", "SSHINC", "SHEX", "SHINC", "FHEX", "FHINC"], required=True),
+        "Extra Days": st.column_config.NumberColumn("Extra Days", format="%.2f"),
+        "Distance": st.column_config.NumberColumn("Distance", format="%.2f"),
+        "PDA": st.column_config.NumberColumn("PDA", format="%.2f")
     },
     hide_index=True, num_rows="dynamic", use_container_width=True, key="rotation_editor"
 )
