@@ -1,35 +1,31 @@
 import streamlit as st
 import requests
+import pandas as pd
 
-st.set_page_config(page_title="Gemi Sorgula", page_icon="🚢")
-st.title("🚢 Gemi Bilgi İstasyonu (RapidAPI)")
-st.write("RapidAPI altyapısı ile gemi bilgilerini anında sorgulayın.")
+# Sayfa Ayarları
+st.set_page_config(page_title="Gemi Detay Sorgulama", page_icon="🚢")
+st.title("🚢 Gemi Bilgi İstasyonu (VesselAPI)")
+st.write("VesselAPI altyapısı ile gemiye ait boyut, tip ve (eğer destekleniyorsa) konum verilerini çekin.")
 
 # Kullanıcı Girişleri
-col1, col2 = st.columns(2)
-with col1:
-    rapid_key = st.text_input("X-RapidAPI-Key:", type="password", help="RapidAPI üzerinden aldığınız şifre")
-with col2:
-    rapid_host = st.text_input("X-RapidAPI-Host:", placeholder="Örn: ship-data.p.rapidapi.com")
-
+api_key = st.text_input("VesselAPI Anahtarınız (Bearer Token):", type="password")
 imo_input = st.text_input("Sorgulanacak Gemi IMO Numarası:", placeholder="Örn: 9468372")
 
-if st.button("Gemiyi Sorgula 🔍", use_container_width=True):
-    if not rapid_key or not rapid_host or not imo_input:
-        st.error("Lütfen API Key, Host ve IMO numarası alanlarını eksiksiz doldurun.")
+if st.button("Verileri Çek 🔍", use_container_width=True):
+    if not api_key or not imo_input:
+        st.error("Lütfen API Key ve IMO numarası alanlarını eksiksiz doldurun.")
     else:
-        with st.spinner("RapidAPI sunucusuna bağlanılıyor..."):
+        with st.spinner("VesselAPI sunucusuna bağlanılıyor..."):
             try:
-                # DİKKAT: Aşağıdaki URL, seçtiğin API'ye göre değişiklik gösterecektir.
-                # Seçtiğin servisin Endpoint URL'sini buraya yapıştırmalısın.
-                api_url = "https://" + rapid_host + "/vessel"
+                # Bulduğun yeni uç nokta (Endpoint) yapısı
+                api_url = f"https://api.vesselapi.com/v1/vessel/{imo_input}" 
                 
-                querystring = {"imo": imo_input}
+                # Dokümantasyondaki 'filter.idType' parametresi
+                querystring = {"filter.idType": "imo"}
                 
-                # RapidAPI güvenlik başlıkları
                 headers = {
-                    "X-RapidAPI-Key": rapid_key,
-                    "X-RapidAPI-Host": rapid_host
+                    "Authorization": f"Bearer {api_key}",
+                    "Accept": "application/json"
                 }
                 
                 response = requests.get(api_url, headers=headers, params=querystring)
@@ -38,13 +34,14 @@ if st.button("Gemiyi Sorgula 🔍", use_container_width=True):
                     data = response.json()
                     st.success("Veri başarıyla çekildi!")
                     
-                    # Not: Gelen verinin yapısı (JSON etiketleri) API'den API'ye değişir.
-                    # Seçtiğin servise göre aşağıdaki 'name', 'dwt' gibi kelimeleri güncellemen gerekebilir.
-                    with st.expander("Gelen Ham Veriyi İncele (JSON Etiketleri İçin)", expanded=True):
-                        st.json(data)
+                    # Gelen tüm veriyi ekrana basıyoruz ki içinde neler olduğunu görelim
+                    st.subheader("📦 Sunucudan Gelen JSON Paketi")
+                    st.json(data)
                         
                 else:
-                    st.error(f"API Hatası: Sunucu {response.status_code} kodu ile yanıt verdi. Limitlerinizi veya API anahtarınızı kontrol edin.")
-                    
+                    st.error(f"API Hatası: {response.status_code}.")
+                    with st.expander("Hata Detayı"):
+                        st.json(response.json())
+                        
             except Exception as e:
-                st.error(f"Bağlantı hatası oluştu: {str(e)}")
+                st.error(f"Sistem Hatası: {str(e)}")
