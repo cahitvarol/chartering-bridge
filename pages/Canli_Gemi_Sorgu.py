@@ -12,8 +12,8 @@ with st.form("rapid_api_form"):
     submit = st.form_submit_button("Bilgileri ve Rotayı Getir 🔍")
 
 if submit:
-    headers = {
-        "x-rapidapi-key": api_key,
+   headers = {
+        "x-rapidapi-key": api_key.strip(), # Baştaki/sondaki boşlukları temizler
         "x-rapidapi-host": "global-vessels.p.rapidapi.com"
     }
 
@@ -44,7 +44,8 @@ if submit:
                 st.subheader("🗺️ Rota Bilgisi")
                 st.json(rota_res.json()) # Rotayı burada haritaya dönüştürebiliriz
         else:
-            st.error("API'den veri alınamadı. Anahtarınızı kontrol edin.")
+            st.error(f"API Hatası (Kod: {detay_res.status_code})")
+            st.write("Sunucudan gelen mesaj:", detay_res.text) # Hatanın gerçek sebebini buraya yazacak
             
     except Exception as e:
         st.error(f"Bağlantı hatası: {e}")
