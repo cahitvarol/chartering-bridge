@@ -1,57 +1,58 @@
 import streamlit as st
-import requests
-import pandas as pd
+import asyncio
+import websockets
+import json
+import time
 
-st.set_page_config(page_title="Gemi Sefer Ekranı", page_icon="🚢", layout="wide")
-st.title("🚢 Operasyonel Gemi Bilgi Ekranı")
+st.set_page_config(page_title="Canlı Bölge Takibi", page_icon="📡", layout="wide")
+st.title("📡 Ege, Marmara ve Karadeniz Canlı Gemi Radarı")
 
-# Form kullanarak girişleri sabitledik
-with st.form("gemi_formu"):
-    api_key = st.text_input("VesselAPI Anahtarınız:", type="password")
-    imo_input = st.text_input("Sorgulanacak Gemi IMO Numarası:", placeholder="Örn: 9704609")
-    submit_button = st.form_submit_button("Seferi Analiz Et 🔍")
+api_key = st.text_input("AISStream API Anahtarınız:", type="password")
 
-if submit_button:
-    if not api_key or not imo_input:
-        st.error("Lütfen bilgileri eksiksiz girin.")
+# Haritadaki geniş alanı kapsayan koordinat kutusu
+# [Lat_Alt, Lon_Sol], [Lat_Ust, Lon_Sag]
+# Ege, Marmara ve Karadeniz batısını kapsar
+bbox = [[[35.0, 25.0], [45.0, 30.0]]]
+
+if st.button("Bölgeyi 5 Dakika İzle 🔍"):
+    if not api_key:
+        st.error("Lütfen API anahtarını girin.")
     else:
-        headers = {"Authorization": f"Bearer {api_key}", "Accept": "application/json"}
-        params = {"filter.idType": "imo"}
+        st.info("İzleme başladı, veriler akıyor...")
+        placeholder = st.empty()
         
-        with st.spinner("Tüm gemi verileri çekiliyor..."):
-            try:
-                # 1. Statik Verileri Çek
-                s_res = requests.get(f"https://api.vesselapi.com/v1/vessel/{imo_input}", headers=headers, params=params)
-                # 2. Konum Verisini Çek
-                p_res = requests.get(f"https://api.vesselapi.com/v1/vessel/{imo_input}/position", headers=headers, params=params)
+        # 5 dakikalık (300 saniye) döngü
+        end_time = time.time() + 300
+        
+        async def run_stream():
+            async with websockets.connect("wss://stream.aisstream.io/v0/stream") as websocket:
+                subscribe_message = {
+                    "APIKey": api_key,
+                    "BoundingBoxes": bbox,
+                    "FilterMessageTypes": ["PositionReport"]
+                }
+                # Bağlantı sonrası 3 saniye içinde abonelik mesajı gönderilmeli
+                await websocket.send(json.dumps(subscribe_message))
                 
-                if s_res.status_code == 200:
-                    static_data = s_res.json().get("vessel", {})
-                    st.subheader("📋 Gemi Teknik Özellikleri")
-                    col1, col2, col3 = st.columns(3)
-                    col1.metric("Gemi Adı", static_data.get("name"))
-                    col2.metric("DWT", f"{static_data.get('deadweight_tonnage')} ton")
-                    col3.metric("Yapım Yılı", static_data.get("year_built"))
-                    
-                    with st.expander("Tüm Teknik Detayları Gör"):
-                        st.json(static_data)
-                
-                if p_res.status_code == 200:
-                    pos_data = p_res.json()
-                    lat = pos_data.get("latitude")
-                    lon = pos_data.get("longitude")
-                    
-                    st.subheader("📍 Konum Bilgisi")
-                    if lat and lon:
-                        col1, col2 = st.columns(2)
-                        col1.metric("Enlem", lat)
-                        col2.metric("Boylam", lon)
-                        df = pd.DataFrame({'lat': [float(lat)], 'lon': [float(lon)]})
-                        st.map(df, zoom=6)
-                    else:
-                        st.warning("Bu gemi şu an karasal sinyal vermiyor.")
-                else:
-                    st.error("Konum bilgisi şu an alınamıyor.")
-                    
-            except Exception as e:
-                st.error(f"Sistem Hatası: {e}")
+                while time.time() < end_time:
+                    try:
+                        # Akıştan veri oku
+                        message_json = await asyncio.wait_for(websocket.recv(), timeout=1.0)
+                        message = json.loads(message_json)
+                        
+                        if message["MessageType"] == "PositionReport":
+                            msg = message['Message']['PositionReport']
+                            meta = message['MetaData']
+                            
+                            # Ekrana anlık veri bas
+                            with placeholder.container():
+                                st.write(f"**Gemi:** {meta.get('ShipName', 'Bilinmiyor')}")
+                                st.write(f"**Koordinat:** {msg['Latitude']}, {msg['Longitude']}")
+                                st.write(f"**Hız:** {msg['Sog']} kn")
+                                st.divider()
+                    except asyncio.TimeoutError:
+                        continue
+        
+        # asyncio döngüsünü başlat
+        asyncio.run(run_stream())
+        st.success("5 dakikalık izleme süresi doldu.")
