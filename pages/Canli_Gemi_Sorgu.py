@@ -2,46 +2,43 @@ import streamlit as st
 import requests
 import pandas as pd
 
-# Sayfa Ayarları
-st.set_page_config(page_title="Gemi Detay Sorgulama", page_icon="🚢")
-st.title("🚢 Gemi Bilgi İstasyonu (VesselAPI)")
-st.write("VesselAPI altyapısı ile gemiye ait boyut, tip ve (eğer destekleniyorsa) konum verilerini çekin.")
+st.set_page_config(page_title="Gemi Sefer Ekranı", page_icon="🚢")
+st.title("🚢 Operasyonel Gemi Bilgi Ekranı")
 
-# Kullanıcı Girişleri
-api_key = st.text_input("VesselAPI Anahtarınız (Bearer Token):", type="password")
-imo_input = st.text_input("Sorgulanacak Gemi IMO Numarası:", placeholder="Örn: 9468372")
+api_key = st.text_input("VesselAPI Anahtarınız:", type="password")
+imo_input = st.text_input("Sorgulanacak Gemi IMO Numarası:", placeholder="Örn: 8332100")
 
-if st.button("Verileri Çek 🔍", use_container_width=True):
+if st.button("Seferi Analiz Et 🔍", use_container_width=True):
     if not api_key or not imo_input:
-        st.error("Lütfen API Key ve IMO numarası alanlarını eksiksiz doldurun.")
+        st.error("Lütfen bilgileri girin.")
     else:
-        with st.spinner("VesselAPI sunucusuna bağlanılıyor..."):
+        headers = {"Authorization": f"Bearer {api_key}", "Accept": "application/json"}
+        
+        with st.spinner("Statik bilgiler ve canlı konum birleştiriliyor..."):
             try:
-                # Bulduğun yeni uç nokta (Endpoint) yapısı
-                api_url = f"https://api.vesselapi.com/v1/vessel/{imo_input}" 
+                # 1. Statik Verileri Çek
+                static_res = requests.get(f"https://api.vesselapi.com/v1/vessel/{imo_input}", 
+                                          headers=headers, params={"filter.idType": "imo"})
+                # 2. Konum Verisini Çek
+                pos_res = requests.get(f"https://api.vesselapi.com/v1/vessel/{imo_input}/position", 
+                                       headers=headers, params={"filter.idType": "imo"})
                 
-                # Dokümantasyondaki 'filter.idType' parametresi
-                querystring = {"filter.idType": "imo"}
-                
-                headers = {
-                    "Authorization": f"Bearer {api_key}",
-                    "Accept": "application/json"
-                }
-                
-                response = requests.get(api_url, headers=headers, params=querystring)
-                
-                if response.status_code == 200:
-                    data = response.json()
-                    st.success("Veri başarıyla çekildi!")
+                if static_res.status_code == 200 and pos_res.status_code == 200:
+                    static_data = static_res.json().get("vessel", {})
+                    pos_data = pos_res.json()
                     
-                    # Gelen tüm veriyi ekrana basıyoruz ki içinde neler olduğunu görelim
-                    st.subheader("📦 Sunucudan Gelen JSON Paketi")
-                    st.json(data)
-                        
+                    # Verileri Göster
+                    st.success("Sefer verileri hazır!")
+                    col1, col2 = st.columns(2)
+                    col1.metric("Gemi Adı", static_data.get("name"))
+                    col1.metric("DWT", f"{static_data.get('deadweight_tonnage')} ton")
+                    col2.metric("Enlem", pos_data.get("latitude"))
+                    col2.metric("Boylam", pos_data.get("longitude"))
+                    
+                    # Harita
+                    df = pd.DataFrame({'lat': [pos_data.get("latitude")], 'lon': [pos_data.get("longitude")]})
+                    st.map(df, zoom=6)
                 else:
-                    st.error(f"API Hatası: {response.status_code}.")
-                    with st.expander("Hata Detayı"):
-                        st.json(response.json())
-                        
+                    st.error("Veri çekme hatası oluştu.")
             except Exception as e:
-                st.error(f"Sistem Hatası: {str(e)}")
+                st.error(f"Hata: {e}")
