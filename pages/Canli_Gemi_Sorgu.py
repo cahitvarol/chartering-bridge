@@ -5,12 +5,15 @@ import pandas as pd
 st.set_page_config(page_title="Gemi Sefer Ekranı", page_icon="🚢", layout="wide")
 st.title("🚢 Operasyonel Gemi Bilgi Ekranı")
 
-api_key = st.text_input("VesselAPI Anahtarınız:", type="password")
-imo_input = st.text_input("Sorgulanacak Gemi IMO Numarası:", placeholder="Örn: 9704609")
+# Form kullanarak girişleri sabitledik
+with st.form("gemi_formu"):
+    api_key = st.text_input("VesselAPI Anahtarınız:", type="password")
+    imo_input = st.text_input("Sorgulanacak Gemi IMO Numarası:", placeholder="Örn: 9704609")
+    submit_button = st.form_submit_button("Seferi Analiz Et 🔍")
 
-if st.button("Seferi Analiz Et 🔍", use_container_width=True):
+if submit_button:
     if not api_key or not imo_input:
-        st.error("Lütfen bilgileri girin.")
+        st.error("Lütfen bilgileri eksiksiz girin.")
     else:
         headers = {"Authorization": f"Bearer {api_key}", "Accept": "application/json"}
         params = {"filter.idType": "imo"}
@@ -24,8 +27,6 @@ if st.button("Seferi Analiz Et 🔍", use_container_width=True):
                 
                 if s_res.status_code == 200:
                     static_data = s_res.json().get("vessel", {})
-                    
-                    # --- Gemi Özelliklerini Listele ---
                     st.subheader("📋 Gemi Teknik Özellikleri")
                     col1, col2, col3 = st.columns(3)
                     col1.metric("Gemi Adı", static_data.get("name"))
@@ -40,7 +41,6 @@ if st.button("Seferi Analiz Et 🔍", use_container_width=True):
                     lat = pos_data.get("latitude")
                     lon = pos_data.get("longitude")
                     
-                    # --- Konum Bilgisi ve Hata Yönetimi ---
                     st.subheader("📍 Konum Bilgisi")
                     if lat and lon:
                         col1, col2 = st.columns(2)
@@ -49,7 +49,7 @@ if st.button("Seferi Analiz Et 🔍", use_container_width=True):
                         df = pd.DataFrame({'lat': [float(lat)], 'lon': [float(lon)]})
                         st.map(df, zoom=6)
                     else:
-                        st.warning("Bu gemi şu an karasal sinyal vermiyor (Uydu verisi gerebilir).")
+                        st.warning("Bu gemi şu an karasal sinyal vermiyor.")
                 else:
                     st.error("Konum bilgisi şu an alınamıyor.")
                     
