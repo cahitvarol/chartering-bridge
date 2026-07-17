@@ -4,14 +4,24 @@ import websockets
 import json
 import time
 
+# Sayfa Ayarları
 st.set_page_config(page_title="Canlı Gemi Sorgula", page_icon="🚢")
 st.title("🚢 Canlı Gemi Bilgi İstasyonu")
 st.write("Aisstream.io altyapısı ile geminin anlık konumunu yakalayın.")
 
+# Kullanıcı Girişleri
 api_key = st.text_input("Aisstream.io API Anahtarınız:", type="password")
 imo_input = st.text_input("Sorgulanacak Gemi IMO Numarası:", placeholder="Örn: 9468372")
-timeout_sure = st.slider("Dinleme Süresi (Saniye): Limandaki gemiler için süreyi uzun tutun.", min_value=15, max_value=300, value=60)
 
+# Bekleme süresi için yeni kaydırıcı (slider) eklendi
+timeout_sure = st.slider(
+    "Dinleme Süresi (Saniye): Limanda veya demirli gemiler (3 dakikada bir sinyal atarlar) için süreyi uzun tutun.", 
+    min_value=15, 
+    max_value=300, 
+    value=180
+)
+
+# timeout_limit parametresi fonksiyona eklendi
 async def fetch_vessel_by_imo(api_token, target_imo, timeout_limit):
     uri = "wss://stream.aisstream.io/v0/stream"
     async with websockets.connect(uri) as websocket:
@@ -22,15 +32,14 @@ async def fetch_vessel_by_imo(api_token, target_imo, timeout_limit):
         await websocket.send(json.dumps(subscribe_message))
         
         status_text = st.empty()
-        status_text.info("Canlı yayın tüneli açıldı... Küresel veri akışından geminiz aranıyor (Maks. 15 saniye)...")
+        status_text.info(f"Canlı yayın tüneli açıldı... Küresel veri akışından geminiz aranıyor (Maks. {timeout_limit} saniye)...")
         
         start_time = time.time()
-        timeout = timeout_limit
-        result = loop.run_until_complete(fetch_vessel_by_imo(api_key, imo_input, timeout_sure))
+        timeout = timeout_limit  
         
         async for message_json in websocket:
             if time.time() - start_time > timeout:
-                status_text.warning("Zaman aşımı! Gemi şu an sinyal göndermiyor olabilir.")
+                status_text.warning("Zaman aşımı! Gemi şu an sinyal göndermiyor veya dinleme süresi yetersiz kaldı.")
                 return None
                 
             message = json.loads(message_json)
@@ -41,6 +50,7 @@ async def fetch_vessel_by_imo(api_token, target_imo, timeout_limit):
                 return message
         return None
 
+# Buton ve Çalıştırma Mantığı
 if st.button("Gemiyi Sorgula 🔍", use_container_width=True):
     if not api_key or not imo_input:
         st.error("Lütfen API anahtarı ve IMO numarasını eksiksiz girin.")
@@ -49,7 +59,8 @@ if st.button("Gemiyi Sorgula 🔍", use_container_width=True):
             try:
                 loop = asyncio.new_event_loop()
                 asyncio.set_event_loop(loop)
-                result = loop.run_until_complete(fetch_vessel_by_imo(api_key, imo_input))
+                # Yeni süre limitini fonksiyona iletiyoruz
+                result = loop.run_until_complete(fetch_vessel_by_imo(api_key, imo_input, timeout_sure))
                 loop.close()
                 
                 if result:
