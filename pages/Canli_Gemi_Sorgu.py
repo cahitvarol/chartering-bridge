@@ -10,8 +10,9 @@ st.write("Aisstream.io altyapısı ile geminin anlık konumunu yakalayın.")
 
 api_key = st.text_input("Aisstream.io API Anahtarınız:", type="password")
 imo_input = st.text_input("Sorgulanacak Gemi IMO Numarası:", placeholder="Örn: 9468372")
+timeout_sure = st.slider("Dinleme Süresi (Saniye): Limandaki gemiler için süreyi uzun tutun.", min_value=15, max_value=300, value=60)
 
-async def fetch_vessel_by_imo(api_token, target_imo):
+async def fetch_vessel_by_imo(api_token, target_imo, timeout_limit):
     uri = "wss://stream.aisstream.io/v0/stream"
     async with websockets.connect(uri) as websocket:
         subscribe_message = {
@@ -24,7 +25,8 @@ async def fetch_vessel_by_imo(api_token, target_imo):
         status_text.info("Canlı yayın tüneli açıldı... Küresel veri akışından geminiz aranıyor (Maks. 15 saniye)...")
         
         start_time = time.time()
-        timeout = 15  
+        timeout = timeout_limit
+        result = loop.run_until_complete(fetch_vessel_by_imo(api_key, imo_input, timeout_sure))
         
         async for message_json in websocket:
             if time.time() - start_time > timeout:
