@@ -1,54 +1,50 @@
 import streamlit as st
-import asyncio
-import websockets
-import json
-import time
+import requests
+import pandas as pd
 
-st.set_page_config(page_title="MMSI Canlı Takip", page_icon="🚢", layout="wide")
-st.title("🚢 MMSI ile Canlı Gemi Takip Radarı")
+st.set_page_config(page_title="Gemi ve Rota Takibi", page_icon="🚢", layout="wide")
+st.title("🚢 RapidAPI - Global Vessels Takibi")
 
-api_key = st.text_input("AISStream API Anahtarınız:", type="password")
-mmsi_input = st.text_input("Takip Edilecek Gemi MMSI Numarası:")
+# RapidAPI bilgilerini güvenli almak için form
+with st.form("rapid_api_form"):
+    api_key = st.text_input("X-RapidAPI-Key:", type="password")
+    mmsi = st.text_input("Sorgulanacak MMSI Numarası:")
+    submit = st.form_submit_button("Bilgileri ve Rotayı Getir 🔍")
 
-# Marmara, Karadeniz, Ege ve Sicilya doğusunu kapsayan geniş alan
-bbox = [[[33.0, 15.0], [46.0, 42.0]]]
+if submit:
+    headers = {
+        "x-rapidapi-key": api_key,
+        "x-rapidapi-host": "global-vessels.p.rapidapi.com"
+    }
 
-if st.button("MMSI ile 5 Dakika İzle 🔍"):
-    if not api_key or not mmsi_input:
-        st.error("Lütfen API anahtarını ve MMSI numarasını girin.")
-    else:
-        st.info(f"{mmsi_input} MMSI numaralı gemi aranıyor...")
-        placeholder = st.empty()
-        end_time = time.time() + 300
+    # 1. Gemi Detaylarını Çek
+    detay_url = f"https://global-vessels.p.rapidapi.com/v1/vessels/{mmsi}"
+    
+    # 2. Rota Verisini Çek
+    rota_url = f"https://global-vessels.p.rapidapi.com/v1/vessels/{mmsi}/route"
+    
+    try:
+        detay_res = requests.get(detay_url, headers=headers)
         
-        async def run_stream():
-            async with websockets.connect("wss://stream.aisstream.io/v0/stream") as websocket:
-                # Sunucu seviyesinde MMSI filtrelemesi (daha performanslı)
-                subscribe_message = {
-                    "APIKey": api_key,
-                    "BoundingBoxes": bbox,
-                    "FiltersShipMMSI": [mmsi_input],  # API'nin doğrudan filtreleme özelliği
-                    "FilterMessageTypes": ["PositionReport"]
-                }
-                await websocket.send(json.dumps(subscribe_message))
+        if detay_res.status_code == 200:
+            data = detay_res.json()
+            st.success("Gemi detayları alındı.")
+            
+            # Teknik verileri göster
+            col1, col2 = st.columns(2)
+            col1.metric("Gemi Adı", data.get("name"))
+            col2.metric("DWT", data.get("deadweight"))
+            
+            with st.expander("Tüm Teknik Bilgiler"):
+                st.json(data)
                 
-                while time.time() < end_time:
-                    try:
-                        message_json = await asyncio.wait_for(websocket.recv(), timeout=1.0)
-                        message = json.loads(message_json)
-                        
-                        if message["MessageType"] == "PositionReport":
-                            msg = message['Message']['PositionReport']
-                            meta = message['MetaData']
-                            
-                            with placeholder.container():
-                                st.write(f"### 📍 Gemi Takip Ediliyor: {meta.get('ShipName', 'Bilinmiyor')}")
-                                st.write(f"**Koordinat:** {msg['Latitude']}, {msg['Longitude']}")
-                                st.write(f"**Hız:** {msg['Sog']} kn")
-                                st.write(f"**MMSI:** {meta.get('MMSI')}")
-                                st.divider()
-                    except asyncio.TimeoutError:
-                        continue
-        
-        asyncio.run(run_stream())
-        st.success("5 dakikalık izleme süresi doldu.")
+            # Rota Sorgusu
+            rota_res = requests.get(rota_url, headers=headers)
+            if rota_res.status_code == 200:
+                st.subheader("🗺️ Rota Bilgisi")
+                st.json(rota_res.json()) # Rotayı burada haritaya dönüştürebiliriz
+        else:
+            st.error("API'den veri alınamadı. Anahtarınızı kontrol edin.")
+            
+    except Exception as e:
+        st.error(f"Bağlantı hatası: {e}")
