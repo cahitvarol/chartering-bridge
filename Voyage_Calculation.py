@@ -76,7 +76,7 @@ def fetch_vessel_data():
             v = data[0] # Gelen ilk satırı alıyoruz
             
             # Excel'deki kolon isimleriyle eşleşecek şekilde verileri atıyoruz
-            st.session_state.v_name = str(v.get("Name Of Ship", ""))
+            st.session_state.v_name = str(v.get("Name of Ship", ""))
             st.session_state.v_type = str(v.get("Type of Ship", ""))
             st.session_state.v_flag = str(v.get("Flag", ""))
             st.session_state.v_class = str(v.get("Class", ""))
@@ -187,11 +187,11 @@ with v3:
     dwt = st.number_input("DWT", key="v_dwt", format="%.2f")
     dwcc = st.number_input("DWCC", key="v_dwcc", format="%.2f")
 with v4:
-    grain = st.number_input("Grain Cap (cuft)", key="v_grain", format="%.2f")
-    bale = st.number_input("Bale Cap (cuft)", key="v_bale", format="%.2f")
+    grain = st.number_input("Grain Cap (cuft)", key="v_grain", format="%.0f")
+    bale = st.number_input("Bale Cap (cuft)", key="v_bale", format="%.0f")
 with v5:
-    gt = st.number_input("GT", key="v_gt", format="%.2f")
-    nt = st.number_input("NT", key="v_nt", format="%.2f")
+    gt = st.number_input("GT", key="v_gt", format="%.0f")
+    nt = st.number_input("NT", key="v_nt", format="%.0f")
 with v6:
     loa = st.number_input("LOA", key="v_loa", format="%.2f")
     beam = st.number_input("Beam", key="v_beam", format="%.2f")
