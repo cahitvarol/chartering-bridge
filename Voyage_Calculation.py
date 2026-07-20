@@ -69,7 +69,7 @@ def fetch_vessel_data():
 
     try:
         # Supabase Sorgusu (IMO Number kolonunda arama yapar)
-        response = supabase.table("vesseldatabase").select("*").in_("IMO Number", [imo_val, f"{imo_val}.0"]).execute()
+        response = supabase.table("vesseldatabase").select("*").ilike("IMO Number", f"%{imo_val}%").execute()
         data = response.data
         
         if data and len(data) > 0:
