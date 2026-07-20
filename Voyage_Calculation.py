@@ -6,7 +6,7 @@ from supabase import create_client, Client
 # =====================================================================
 # SUPABASE BAĞLANTI AYARLARI (Kendi bilgilerinizi buraya girin)
 # =====================================================================
-SUPABASE_URL = "https://hoygbxuspdtfdfpwkgod.supabase.co/"
+SUPABASE_URL = "https://hoygbxuspdtfdfpwkgod.supabase.co"
 SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhveWdieHVzcGR0ZmRmcHdrZ29kIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM3NzQ4NjMsImV4cCI6MjA5OTM1MDg2M30.zkLZE6B9rFO-7bZZGBUOIwcyNtFI_xIeED2PPICrk4A"
 
 @st.cache_resource
