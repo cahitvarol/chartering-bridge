@@ -276,22 +276,22 @@ with cp5:
 
 st.write("")
 
-# ----- TABLO 1: PORT ROTATION -----
+# ----- TABLO 1: PORT ROTATION (Kesin Çözüm) -----
 st.markdown("**Port Rotation**")
 
-# 1. Aşama: Veriyi hafızada (state) oluştur (Eğer yoksa)
-if 'port_rotation_data' not in st.session_state:
-    st.session_state.port_rotation_data = pd.DataFrame({
+# 1. AŞAMA: Tablonun iskeletini (base) BİR KERE oluşturuyoruz ve bir daha kodla ASLA değiştirmiyoruz.
+if 'port_rotation_base' not in st.session_state:
+    st.session_state.port_rotation_base = pd.DataFrame({
         "Port Type": ["Ballast Port"],
         "Port Name": [""],
         "Distance": [0.0],
         "Weather Margin (%)": [5]
     })
 
-# 2. Aşama: Data Editor'u benzersiz bir 'key' ile ekrana bas
-edited_rotation = st.data_editor(
-    st.session_state.port_rotation_data,
-    key="rotation_editor_widget", # SIFIRLANMAYI ENGELLEYEN EN ÖNEMLİ KISIM
+# 2. AŞAMA: Data Editor sadece sabit 'base' veriyi okur. Siz satır ekledikçe bunu 'key' hafızasında tutar.
+current_rotation = st.data_editor(
+    st.session_state.port_rotation_base,
+    key="rotation_editor_widget",
     column_config={
         "Port Type": st.column_config.SelectboxColumn("**Port Type**", options=["Ballast Port", "Load Port", "Discharge Port", "Bunker Port", "Return Ballast"], required=True),
         "Port Name": st.column_config.TextColumn("**Port Name**"),
@@ -303,9 +303,8 @@ edited_rotation = st.data_editor(
     use_container_width=True
 )
 
-# 3. Aşama: Değişiklikleri tekrar hafızaya kaydet
-st.session_state.port_rotation_data = edited_rotation
-st.session_state.port_rotation_df = edited_rotation # Get Distance butonunun çalışması için kopyasını tutuyoruz
+# 3. AŞAMA: Hesaplama butonunun (aşağıdaki kodların) görebilmesi için GÜNCEL halini eski isme eşitliyoruz.
+st.session_state.port_rotation_df = current_rotation
 
 # ----- GET DISTANCE BUTONU VE VERİ AKTARIMI -----
 _, btn_col = st.columns([5, 1])
