@@ -130,8 +130,10 @@ with col_left:
 
 with col_right:
     st.markdown("**Bunker Prices**")
-    if 'bunker_df' not in st.session_state:
-        st.session_state.bunker_df = pd.DataFrame({
+    
+    # 1. Base (İskelet) oluştur
+    if 'bunker_base' not in st.session_state:
+        st.session_state.bunker_base = pd.DataFrame({
             "Seç": [True, False, False, False],
             "Liman": ["Istanbul", "Gibraltar", "3rd Port", "4th Port"],
             "MGO %0,1": [1050.0, 1020.0, 0.0, 0.0],
@@ -140,8 +142,9 @@ with col_right:
             "IFO380 %3,5": [580.0, 550.0, 0.0, 0.0]
         })
 
+    # 2. Data Editor'u Base üzerinden çağır
     edited_df = st.data_editor(
-        st.session_state.bunker_df,
+        st.session_state.bunker_base,
         column_config={
             "Seç": st.column_config.CheckboxColumn("Seç", default=False, width="small"),
             "Liman": st.column_config.TextColumn("Liman", width="medium"),
@@ -152,26 +155,27 @@ with col_right:
         },
         hide_index=True,
         use_container_width=True,
-        key="bunker_editor"
+        key="bunker_editor_widget"
     )
     
-    prev_selections = st.session_state.bunker_df["Seç"].tolist()
+    # Checkbox Seçim Mantığı
+    prev_selections = st.session_state.bunker_base["Seç"].tolist()
     curr_selections = edited_df["Seç"].tolist()
     changed_to_true = [i for i, (p, c) in enumerate(zip(prev_selections, curr_selections)) if not p and c]
     
     if changed_to_true:
         edited_df["Seç"] = False
         edited_df.loc[changed_to_true[0], "Seç"] = True
-        st.session_state.bunker_df = edited_df
+        st.session_state.bunker_base = edited_df # Rerun için iskeleti güncelliyoruz
         st.rerun() 
-    else:
-        st.session_state.bunker_df = edited_df
+
+    # 3. Hesaplamalar için çıktıyı eski df ismine aktar
+    st.session_state.bunker_df = edited_df
 
 secili_satirlar = st.session_state.bunker_df[st.session_state.bunker_df["Seç"] == True]
 if not secili_satirlar.empty:
     aktif_liman = secili_satirlar.iloc[0]["Liman"]
     st.caption(f"Aktif Liman: **{aktif_liman}**")
-
 
 # =====================================================================
 # BÖLÜM 2: VESSEL DETAILS
@@ -207,41 +211,42 @@ sc1, sc2 = st.columns([1.2, 1])
 yakit_tipleri = ["MGO %0,1", "ULSFO %0,1", "VLSFO %0,5", "IFO380 %3,5"]
 
 with sc1:
-    if 'sea_df' not in st.session_state:
-        st.session_state.sea_df = pd.DataFrame({
+    if 'sea_base' not in st.session_state:
+        st.session_state.sea_base = pd.DataFrame({
             "At Sea": ["Ballast", "Laden"],
             "Speed": [0.0, 0.0],
             "Cons": [0.0, 0.0],
             "Select": ["MGO %0,1", "MGO %0,1"]
         })
-    st.session_state.sea_df = st.data_editor(
-        st.session_state.sea_df, 
+    current_sea = st.data_editor(
+        st.session_state.sea_base, 
         column_config={
             "At Sea": st.column_config.TextColumn("At Sea"),
             "Speed": st.column_config.NumberColumn("Speed", format="%.2f knot"),
             "Cons": st.column_config.NumberColumn("Cons", format="%.2f mts"),
             "Select": st.column_config.SelectboxColumn("Select", options=yakit_tipleri)
         },
-        hide_index=True, use_container_width=True, key="sea_editor_main"
+        hide_index=True, use_container_width=True, key="sea_editor_widget"
     )
+    st.session_state.sea_df = current_sea
 
 with sc2:
-    if 'port_df' not in st.session_state:
-        st.session_state.port_df = pd.DataFrame({
+    if 'port_base' not in st.session_state:
+        st.session_state.port_base = pd.DataFrame({
             "At Port": ["Idle", "Work"],
             "Cons": [0.0, 0.0],
             "Select": ["MGO %0,1", "MGO %0,1"]
         })
-    st.session_state.port_df = st.data_editor(
-        st.session_state.port_df, 
+    current_port = st.data_editor(
+        st.session_state.port_base, 
         column_config={
             "At Port": st.column_config.TextColumn("At Port"),
             "Cons": st.column_config.NumberColumn("Cons", format="%.2f mts"),
             "Select": st.column_config.SelectboxColumn("Select", options=yakit_tipleri)
         },
-        hide_index=True, use_container_width=True, key="port_editor_main"
+        hide_index=True, use_container_width=True, key="port_editor_widget"
     )
-
+    st.session_state.port_df = current_port
 
 # =====================================================================
 # BÖLÜM 3: C/P DETAILS
@@ -316,13 +321,14 @@ with btn_col:
         filtered_df = df[df["Port Type"].isin(["Load Port", "Discharge Port"])]
         
         if not filtered_df.empty:
-            st.session_state.port_charges_df = pd.DataFrame({
+            # DİKKAT: Artık df'leri değil, base'leri değiştiriyoruz
+            st.session_state.port_charges_base = pd.DataFrame({
                 "Port Type": filtered_df["Port Type"].tolist(),
                 "Port Name": filtered_df["Port Name"].tolist(),
                 "PDA": [0.0] * len(filtered_df),
                 "Liner Expenses": [0.0] * len(filtered_df)
             })
-            st.session_state.ld_details_df = pd.DataFrame({
+            st.session_state.ld_details_base = pd.DataFrame({
                 "Port Type": filtered_df["Port Type"].tolist(),
                 "Port Name": filtered_df["Port Name"].tolist(),
                 "Rate": [0.0] * len(filtered_df),
@@ -331,13 +337,13 @@ with btn_col:
                 "Extra Days": [0.0] * len(filtered_df)
             })
         else:
-            st.session_state.port_charges_df = pd.DataFrame({"Port Type": [""], "Port Name": [""], "PDA": [0.0], "Liner Expenses": [0.0]})
-            st.session_state.ld_details_df = pd.DataFrame({"Port Type": [""], "Port Name": [""], "Rate": [0.0], "Unit": ["mts/day"], "L/D Terms": ["SSHEX"], "Extra Days": [0.0]})
+            st.session_state.port_charges_base = pd.DataFrame({"Port Type": [""], "Port Name": [""], "PDA": [0.0], "Liner Expenses": [0.0]})
+            st.session_state.ld_details_base = pd.DataFrame({"Port Type": [""], "Port Name": [""], "Rate": [0.0], "Unit": ["mts/day"], "L/D Terms": ["SSHEX"], "Extra Days": [0.0]})
         
-        if "charges_editor_main" in st.session_state:
-            del st.session_state["charges_editor_main"]
-        if "ld_editor_main" in st.session_state:
-            del st.session_state["ld_editor_main"]
+        if "charges_editor_widget" in st.session_state:
+            del st.session_state["charges_editor_widget"]
+        if "ld_editor_widget" in st.session_state:
+            del st.session_state["ld_editor_widget"]
             
         st.rerun()
 
@@ -347,30 +353,33 @@ col_t2, col_t3 = st.columns([1.2, 1.8])
 # ----- TABLO 2: PORT CHARGES -----
 with col_t2:
     st.markdown("**Port Charges**")
-    if 'port_charges_df' not in st.session_state:
-        st.session_state.port_charges_df = pd.DataFrame({"Port Type": [""], "Port Name": [""], "PDA": [0.0], "Liner Expenses": [0.0]})
+    if 'port_charges_base' not in st.session_state:
+        st.session_state.port_charges_base = pd.DataFrame({"Port Type": [""], "Port Name": [""], "PDA": [0.0], "Liner Expenses": [0.0]})
     
-    st.session_state.port_charges_df = st.data_editor(
-        st.session_state.port_charges_df,
+    current_charges = st.data_editor(
+        st.session_state.port_charges_base,
+        key="charges_editor_widget",
         column_config={
             "Port Type": st.column_config.TextColumn("**Port Type**", disabled=True),
             "Port Name": st.column_config.TextColumn("**Port Name**"),
             "PDA": st.column_config.NumberColumn("**PDA**", format="%.2f"),
             "Liner Expenses": st.column_config.NumberColumn("**Liner Expenses**", format="%.2f")
         },
-        hide_index=True, num_rows="dynamic", use_container_width=True, key="charges_editor_main"
+        hide_index=True, num_rows="dynamic", use_container_width=True
     )
+    st.session_state.port_charges_df = current_charges
 
 # ----- TABLO 3: L/D DETAILS -----
 with col_t3:
     st.markdown("**L/D Details**")
-    if 'ld_details_df' not in st.session_state:
-        st.session_state.ld_details_df = pd.DataFrame({
+    if 'ld_details_base' not in st.session_state:
+        st.session_state.ld_details_base = pd.DataFrame({
             "Port Type": [""], "Port Name": [""], "Rate": [0.0], "Unit": ["mts/day"], "L/D Terms": ["SSHEX"], "Extra Days": [0.0]
         })
     
-    st.session_state.ld_details_df = st.data_editor(
-        st.session_state.ld_details_df,
+    current_ld = st.data_editor(
+        st.session_state.ld_details_base,
+        key="ld_editor_widget",
         column_config={
             "Port Type": st.column_config.TextColumn("**Port Type**", disabled=True),
             "Port Name": st.column_config.TextColumn("**Port Name**", disabled=True),
@@ -379,9 +388,10 @@ with col_t3:
             "L/D Terms": st.column_config.SelectboxColumn("**L/D Terms**", options=["SSHEX", "SSHINC", "SHEX", "SHINC", "FHEX", "FHINC"]),
             "Extra Days": st.column_config.NumberColumn("**Extra Days**", format="%.2f")
         },
-        hide_index=True, num_rows="dynamic", use_container_width=True, key="ld_editor_main"
+        hide_index=True, num_rows="dynamic", use_container_width=True
     )
-
+    st.session_state.ld_details_df = current_ld
+    
 # =====================================================================
 # HESAPLAMA BUTONU VE MATEMATİKSEL İŞLEMLER
 # =====================================================================
