@@ -276,27 +276,36 @@ with cp5:
 
 st.write("")
 
-# ----- TABLO 1: PORT ROTATION (Sıfırlanma Çözümü ve % Formatı Eklendi) -----
+# ----- TABLO 1: PORT ROTATION -----
 st.markdown("**Port Rotation**")
-if 'port_rotation_df' not in st.session_state:
-    st.session_state.port_rotation_df = pd.DataFrame({
+
+# 1. Aşama: Veriyi hafızada (state) oluştur (Eğer yoksa)
+if 'port_rotation_data' not in st.session_state:
+    st.session_state.port_rotation_data = pd.DataFrame({
         "Port Type": ["Ballast Port"],
         "Port Name": [""],
         "Distance": [0.0],
         "Weather Margin (%)": [5]
     })
 
-# "key" parametresini kaldırıp, state atamasını doğrudan yaparak sıfırlanma (reset) bug'ını çözüyoruz.
-st.session_state.port_rotation_df = st.data_editor(
-    st.session_state.port_rotation_df,
+# 2. Aşama: Data Editor'u benzersiz bir 'key' ile ekrana bas
+edited_rotation = st.data_editor(
+    st.session_state.port_rotation_data,
+    key="rotation_editor_widget", # SIFIRLANMAYI ENGELLEYEN EN ÖNEMLİ KISIM
     column_config={
         "Port Type": st.column_config.SelectboxColumn("**Port Type**", options=["Ballast Port", "Load Port", "Discharge Port", "Bunker Port", "Return Ballast"], required=True),
         "Port Name": st.column_config.TextColumn("**Port Name**"),
         "Distance": st.column_config.NumberColumn("**Distance**"), 
-        "Weather Margin (%)": st.column_config.NumberColumn("**Weather Margin (%)**", format="%d %%", step=1, default=5)
+        "Weather Margin (%)": st.column_config.NumberColumn("**Weather Margin (%)**", format="%d %%", step=1)
     },
-    hide_index=True, num_rows="dynamic", use_container_width=True
+    hide_index=True, 
+    num_rows="dynamic", 
+    use_container_width=True
 )
+
+# 3. Aşama: Değişiklikleri tekrar hafızaya kaydet
+st.session_state.port_rotation_data = edited_rotation
+st.session_state.port_rotation_df = edited_rotation # Get Distance butonunun çalışması için kopyasını tutuyoruz
 
 # ----- GET DISTANCE BUTONU VE VERİ AKTARIMI -----
 _, btn_col = st.columns([5, 1])
