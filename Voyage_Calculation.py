@@ -18,6 +18,16 @@ def init_connection():
 
 supabase = init_connection()
 
+# =====================================================================
+# SAYI FORMATLAMA FONKSİYONU (10.000,00 - Türkiye/Avrupa Formatı)
+# =====================================================================
+def format_tr(val, is_int=False):
+    if pd.isna(val): return "0"
+    if is_int:
+        return "{:,.0f}".format(val).replace(",", ".")
+    else:
+        return "{:,.2f}".format(val).replace(",", "X").replace(".", ",").replace("X", ".")
+
 # Sayfa Yapılandırması
 st.set_page_config(page_title="Chartering Bridge", layout="wide")
 
@@ -39,7 +49,6 @@ st.markdown("<h1 style='text-align: center; font-weight: bold; font-size: 42px;'
 # =====================================================================
 # IMO OTOMATİK DOLDURMA FONKSİYONU VE STATE AYARLARI
 # =====================================================================
-# Gemi kutuları için hafıza (Session State) tanımlaması
 vessel_keys = {
     "v_imo": "", "v_name": "", "v_type": "", "v_flag": "", "v_class": "", "v_built": "",
     "v_dwt": 0.0, "v_dwcc": 0.0, "v_grain": 0.0, "v_bale": 0.0,
@@ -50,13 +59,11 @@ for k, v in vessel_keys.items():
         st.session_state[k] = v
 
 def reset_vessel_data():
-    """Gemi bulunamazsa kutuları temizler"""
     for key in vessel_keys.keys():
         if key != "v_imo":
             st.session_state[key] = vessel_keys[key]
 
 def fetch_vessel_data():
-    """Supabase'den IMO numarasına göre gemiyi çeker"""
     imo_val = str(st.session_state.v_imo).strip()
     
     if not imo_val:
@@ -68,14 +75,12 @@ def fetch_vessel_data():
         return
 
     try:
-        # Supabase Sorgusu (IMO Number kolonunda arama yapar)
         response = supabase.table("vesseldatabase").select("*").ilike("IMO Number", f"%{imo_val}%").execute()
         data = response.data
         
         if data and len(data) > 0:
-            v = data[0] # Gelen ilk satırı alıyoruz
+            v = data[0]
             
-            # Excel'deki kolon isimleriyle eşleşecek şekilde verileri atıyoruz
             st.session_state.v_name = str(v.get("Name of Ship", ""))
             st.session_state.v_type = str(v.get("Type of Ship", ""))
             st.session_state.v_flag = str(v.get("Flag", ""))
@@ -169,13 +174,12 @@ if not secili_satirlar.empty:
 
 
 # =====================================================================
-# BÖLÜM 2: VESSEL DETAILS (Dinamik Veritabanı Kutuları)
+# BÖLÜM 2: VESSEL DETAILS
 # =====================================================================
 st.markdown('<p class="main-header">2 - Vessel Details</p>', unsafe_allow_html=True)
 
 v1, v2, v3, v4, v5, v6 = st.columns(6)
 with v1:
-    # IMO girişi on_change (değişim olduğunda) fetch_vessel_data fonksiyonunu tetikler
     imo = st.text_input("IMO", key="v_imo", on_change=fetch_vessel_data)
     name = st.text_input("Name", key="v_name")
     v_type = st.text_input("Type", key="v_type")
@@ -272,25 +276,26 @@ with cp5:
 
 st.write("")
 
-# ----- TABLO 1: PORT ROTATION -----
+# ----- TABLO 1: PORT ROTATION (Sıfırlanma Çözümü ve % Formatı Eklendi) -----
 st.markdown("**Port Rotation**")
 if 'port_rotation_df' not in st.session_state:
     st.session_state.port_rotation_df = pd.DataFrame({
         "Port Type": ["Ballast Port"],
         "Port Name": [""],
         "Distance": [0.0],
-        "Weather Margin (%)": [5.0]
+        "Weather Margin (%)": [5]
     })
 
+# "key" parametresini kaldırıp, state atamasını doğrudan yaparak sıfırlanma (reset) bug'ını çözüyoruz.
 st.session_state.port_rotation_df = st.data_editor(
     st.session_state.port_rotation_df,
     column_config={
         "Port Type": st.column_config.SelectboxColumn("**Port Type**", options=["Ballast Port", "Load Port", "Discharge Port", "Bunker Port", "Return Ballast"], required=True),
         "Port Name": st.column_config.TextColumn("**Port Name**"),
-        "Distance": st.column_config.NumberColumn("**Distance**", format="%.2f"),
-        "Weather Margin (%)": st.column_config.NumberColumn("**Weather Margin (%)**", format="%.1f", default=5.0)
+        "Distance": st.column_config.NumberColumn("**Distance**"), 
+        "Weather Margin (%)": st.column_config.NumberColumn("**Weather Margin (%)**", format="%d %%", step=1, default=5)
     },
-    hide_index=True, num_rows="dynamic", use_container_width=True, key="rotation_editor_main"
+    hide_index=True, num_rows="dynamic", use_container_width=True
 )
 
 # ----- GET DISTANCE BUTONU VE VERİ AKTARIMI -----
@@ -369,96 +374,98 @@ with col_t3:
         hide_index=True, num_rows="dynamic", use_container_width=True, key="ld_editor_main"
     )
 
-
-# =====================================================================
-# BÖLÜM 4: CALCULATION & STRATEGY (GÖRSEL ŞABLON)
-# =====================================================================
 # =====================================================================
 # HESAPLAMA BUTONU VE MATEMATİKSEL İŞLEMLER
 # =====================================================================
+st.write("")
 st.write("")
 _, calc_btn_col, _ = st.columns([2, 2, 2])
 
 with calc_btn_col:
     hesapla_basildi = st.button("🚀 CALCULATE VOYAGE", type="primary", use_container_width=True)
 
-# Hesaplama sonuçlarını tutacağımız varsayılan değişkenler (Butona basılmadan önce 0 görünmesi için)
 if "res_summary" not in st.session_state:
     st.session_state.res_summary = {"total_days": 0.0, "sea_days": 0.0, "port_days": 0.0}
-    st.session_state.res_fuel_mts = {"MGO": 0.0, "ULSFO": 0.0, "VLSFO": 0.0, "IFO380": 0.0}
-    st.session_state.res_fuel_cost = {"MGO": 0.0, "ULSFO": 0.0, "VLSFO": 0.0, "IFO380": 0.0}
-    st.session_state.res_opex = 0.0
+    st.session_state.voyage_legs_data = [] 
     st.session_state.res_revenue = 0.0
+    st.session_state.res_opex = 0.0
     st.session_state.res_profit = 0.0
     st.session_state.res_tce = 0.0
     st.session_state.res_breakeven = 0.0
+    st.session_state.res_bunker_cost = 0.0
     st.session_state.res_opex_details = []
 
 if hesapla_basildi:
-    # 1. TEMEL VERİLERİ ÇEKME
-    # Yük miktarı ve Navlun
-    q = quantity if quantity > 0 else 1.0 # Sıfıra bölme hatasını önlemek için
+    q = quantity if quantity > 0 else 1.0 
     f_rate = freight
     
-    # Hız ve Tüketim (Sea) - Index 0: Ballast, Index 1: Laden
     spd_bal = float(st.session_state.sea_df.iloc[0]["Speed"]) if float(st.session_state.sea_df.iloc[0]["Speed"]) > 0 else 1.0
     spd_ldn = float(st.session_state.sea_df.iloc[1]["Speed"]) if float(st.session_state.sea_df.iloc[1]["Speed"]) > 0 else 1.0
     cons_bal = float(st.session_state.sea_df.iloc[0]["Cons"])
     cons_ldn = float(st.session_state.sea_df.iloc[1]["Cons"])
     
-    # Hız ve Tüketim (Port) - Index 0: Idle, Index 1: Work
-    cons_port_idle = float(st.session_state.port_df.iloc[0]["Cons"])
     cons_port_work = float(st.session_state.port_df.iloc[1]["Cons"])
 
-    # Aktif Liman Yakıt Fiyatları
     aktif_fiyatlar = st.session_state.bunker_df[st.session_state.bunker_df["Seç"] == True].iloc[0]
 
-    # 2. SÜRE VE MESAFE HESAPLAMALARI
+    # --- BACAK (LEG) BAZLI SÜRE VE MESAFE HESABI ---
+    voyage_legs = []
     total_sea_days = 0.0
+    
+    port_names = []
+    for i, r in st.session_state.port_rotation_df.iterrows():
+        name = str(r.get("Port Name", "")).strip()
+        if not name: name = f"Port {i+1}"
+        port_names.append(name)
+
+    prev_port = "Origin"
     for idx, row in st.session_state.port_rotation_df.iterrows():
-        dist = float(row["Distance"])
-        margin = float(row["Weather Margin (%)"]) / 100.0
+        port_name = port_names[idx]
+        dist = float(row.get("Distance", 0.0))
+        margin = float(row.get("Weather Margin (%)", 5.0)) / 100.0
+        port_type = str(row.get("Port Type", ""))
         
-        # Basit mantık: Yükleme limanına gidiş Ballast, Tahliye limanına gidiş Laden
-        if str(row["Port Type"]) in ["Ballast Port", "Load Port"]:
+        if port_type in ["Ballast Port", "Load Port", "Return Ballast"]:
             days = (dist / (spd_bal * 24)) * (1 + margin)
         else:
             days = (dist / (spd_ldn * 24)) * (1 + margin)
+            
         total_sea_days += days
+        leg_name = f"{prev_port} - {port_name}" if idx > 0 else f"Ballast -> {port_name}"
+        
+        voyage_legs.append({
+            "Leg": leg_name,
+            "Sea Days": days,
+            "Port Days": 0.0 
+        })
+        prev_port = port_name
 
     total_port_days = 0.0
     for idx, row in st.session_state.ld_details_df.iterrows():
-        rate = float(row["Rate"])
-        ex_days = float(row["Extra Days"])
-        unit = str(row["Unit"])
+        rate = float(row.get("Rate", 0.0))
+        ex_days = float(row.get("Extra Days", 0.0))
+        unit = str(row.get("Unit", ""))
         
         if unit == "mts/day" and rate > 0:
             p_days = (q / rate) + ex_days
-        elif unit == "days":
-            p_days = rate + ex_days
         else:
             p_days = rate + ex_days
+            
         total_port_days += p_days
+        if idx < len(voyage_legs):
+            voyage_legs[idx]["Port Days"] = p_days
 
     total_days = total_sea_days + total_port_days
 
-    # 3. YAKIT (BUNKER) HESAPLAMASI
-    # Basitleştirilmiş Yakıt Seçimi: Şimdilik ana tüketimi temsil eden yakıt türüne göre hesaplanır
-    # Proje geliştikçe her bacak için ayrı yakıt tipi formüle edilebilir.
-    sea_fuel_type_bal = str(st.session_state.sea_df.iloc[0]["Select"])
+    # --- DİĞER HESAPLAMALAR ---
     sea_fuel_type_ldn = str(st.session_state.sea_df.iloc[1]["Select"])
-    port_fuel_type = str(st.session_state.port_df.iloc[1]["Select"])
-
     total_sea_fuel_mts = ((total_sea_days / 2) * cons_bal) + ((total_sea_days / 2) * cons_ldn)
     total_port_fuel_mts = total_port_days * cons_port_work
-    
     total_fuel_mts = total_sea_fuel_mts + total_port_fuel_mts
     
-    # Tüketilen yakıtın fiyat karşılığı (Şimdilik tek yakıt tipi üzerinden maliyetlendirme)
     fuel_price = float(aktif_fiyatlar.get(sea_fuel_type_ldn, 0.0))
     total_bunker_cost = total_fuel_mts * fuel_price
 
-    # 4. GELİR VE GİDER (OPEX) HESAPLAMALARI
     gross_freight = f_rate * q if freight_term == "pmt" else f_rate
     total_revenue = gross_freight + demurrage
 
@@ -470,12 +477,11 @@ if hesapla_basildi:
                   despatch + strait_canal + extra_insurance + 
                   cargo_survey + other_exp + commissions + freight_tax)
 
-    # 5. KARLILIK SONUÇLARI
     op_profit = total_revenue - total_opex
     tce = op_profit / total_days if total_days > 0 else 0.0
     breakeven = total_opex / q if q > 0 else 0.0
 
-    # Sonuçları State'e kaydet
+    st.session_state.voyage_legs_data = voyage_legs
     st.session_state.res_summary = {"total_days": total_days, "sea_days": total_sea_days, "port_days": total_port_days}
     st.session_state.res_revenue = total_revenue
     st.session_state.res_opex = total_opex
@@ -483,18 +489,16 @@ if hesapla_basildi:
     st.session_state.res_tce = tce
     st.session_state.res_breakeven = breakeven
     st.session_state.res_bunker_cost = total_bunker_cost
-    
     st.session_state.res_opex_details = [
         total_bunker_cost, total_pda, freight_tax, total_liner, 0.0, 
         despatch, strait_canal, extra_insurance, cargo_survey, other_exp, 
         gross_freight * (add_comm/100), gross_freight * (broker_comm/100), total_opex
     ]
-    
     st.toast("Sefer hesaplaması başarıyla tamamlandı!", icon="📈")
 
 
 # =====================================================================
-# BÖLÜM 4: CALCULATION & STRATEGY (GÜNCELLENMİŞ GÖRSEL)
+# BÖLÜM 4: CALCULATION & STRATEGY (SONUÇ EKRANI)
 # =====================================================================
 st.markdown('<p class="main-header">4 - Calculation & Strategy</p>', unsafe_allow_html=True)
 
@@ -502,53 +506,73 @@ calc_col1, calc_col2, calc_col3 = st.columns([2.5, 1.2, 1.2])
 
 with calc_col1:
     st.markdown("<div style='text-align: center; font-weight: bold; background-color: #f0f2f6; color: black; padding: 5px;'>Voyage Summary</div>", unsafe_allow_html=True)
-    header_tuples = [
-        (" ", "Metrics"), (" ", "Duration (Days)"),
-        ("Sea", "Days"), ("Port", "Days")
-    ]
-    calc_multi_columns = pd.MultiIndex.from_tuples(header_tuples)
     
-    summary_data = [
-        ["Total Voyage", f"{st.session_state.res_summary['total_days']:.2f}", 
-         f"{st.session_state.res_summary['sea_days']:.2f}", 
-         f"{st.session_state.res_summary['port_days']:.2f}"]
-    ]
-    
-    bunker_calc_df = pd.DataFrame(summary_data, columns=calc_multi_columns)
+    summary_list = []
+    if "voyage_legs_data" in st.session_state and st.session_state.voyage_legs_data:
+        for leg in st.session_state.voyage_legs_data:
+            leg_total = leg["Sea Days"] + leg["Port Days"]
+            summary_list.append([
+                leg["Leg"], 
+                format_tr(leg_total), 
+                format_tr(leg["Sea Days"]), 
+                format_tr(leg["Port Days"])
+            ])
+        
+        # En Alta Toplam Satırını Ekle
+        summary_list.append([
+            "TOTAL VOYAGE", 
+            format_tr(st.session_state.res_summary['total_days']), 
+            format_tr(st.session_state.res_summary['sea_days']), 
+            format_tr(st.session_state.res_summary['port_days'])
+        ])
+    else:
+        summary_list = [["TOTAL VOYAGE", "0,00", "0,00", "0,00"]]
+
+    bunker_calc_df = pd.DataFrame(
+        summary_list, 
+        columns=["Voyage Legs", "Total Duration", "Sea Days", "Port Days"]
+    )
     st.dataframe(bunker_calc_df, hide_index=True, use_container_width=True)
     
-    st.info(f"💡 **Bunker Cost (Total):** $ {st.session_state.get('res_bunker_cost', 0.0):,.2f}")
+    st.info(f"💡 **Bunker Cost (Total):** $ {format_tr(st.session_state.get('res_bunker_cost', 0.0))}")
 
 with calc_col2:
     st.markdown("<div style='text-align: center; font-weight: bold; background-color: #f0f2f6; color: black; padding: 5px;'>Operational Expenses</div>", unsafe_allow_html=True)
     
     opex_vals = st.session_state.res_opex_details if st.session_state.res_opex_details else [0.0] * 13
     
+    # 10.000,00 formatına çeviriyoruz
+    formatted_opex = [f"$ {format_tr(v)}" for v in opex_vals]
+    
     op_exp_df = pd.DataFrame({
         "Item": ["Bunker Expense", "Port Charges", "Freight Tax", "Liner IN", "Liner OUT", "Despatch", "Strait / Canal Exp.", "Extra Insurance", "Cargo Survey", "Other", "Add Comm.", "Brkg Comm.", "TOTAL"],
-        "Cost": opex_vals
+        "Cost": formatted_opex
     })
-    st.dataframe(op_exp_df, hide_index=True, use_container_width=True, height=520, column_config={"Cost": st.column_config.NumberColumn(format="$ %.2f")})
+    st.dataframe(op_exp_df, hide_index=True, use_container_width=True, height=520)
 
 with calc_col3:
     st.markdown("<div style='text-align: center; font-weight: bold; background-color: #f0f2f6; color: black; padding: 5px;'>Revenue</div>", unsafe_allow_html=True)
+    
+    rev = st.session_state.res_revenue
+    dem = demurrage if "demurrage" in locals() else 0.0
+    
     rev_df = pd.DataFrame({
         "Item": ["Freight", "Demurrage", "TOTAL"],
-        "Amount": [st.session_state.res_revenue - demurrage, demurrage, st.session_state.res_revenue]
+        "Amount": [f"$ {format_tr(rev - dem)}", f"$ {format_tr(dem)}", f"$ {format_tr(rev)}"]
     })
-    st.dataframe(rev_df, hide_index=True, use_container_width=True, column_config={"Amount": st.column_config.NumberColumn(format="$ %.2f")})
+    st.dataframe(rev_df, hide_index=True, use_container_width=True)
     
     st.markdown("<div style='text-align: center; font-weight: bold; background-color: #f0f2f6; color: black; padding: 5px;'>RESULT</div>", unsafe_allow_html=True)
     res_df = pd.DataFrame({
         "Metric": ["Total Revenue", "Total Op. Expens.", "Operational Profit", "Daily Profit (TCE)"],
         "Value": [
-            st.session_state.res_revenue, 
-            st.session_state.res_opex, 
-            st.session_state.res_profit, 
-            st.session_state.res_tce
+            f"$ {format_tr(st.session_state.res_revenue)}", 
+            f"$ {format_tr(st.session_state.res_opex)}", 
+            f"$ {format_tr(st.session_state.res_profit)}", 
+            f"$ {format_tr(st.session_state.res_tce)}"
         ]
     })
-    st.dataframe(res_df, hide_index=True, use_container_width=True, column_config={"Value": st.column_config.NumberColumn(format="$ %.2f")})
+    st.dataframe(res_df, hide_index=True, use_container_width=True)
     
     st.write("")
-    st.metric(label="🎯 Break-even Freight", value=f"$ {st.session_state.res_breakeven:,.2f} / mt", delta="- Zarar Sınırı", delta_color="inverse")
+    st.metric(label="🎯 Break-even Freight", value=f"$ {format_tr(st.session_state.res_breakeven)} / mt", delta="- Zarar Sınırı", delta_color="inverse")
