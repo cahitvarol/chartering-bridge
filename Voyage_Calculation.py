@@ -428,7 +428,7 @@ if hesapla_basildi:
     sea_fuel_type_ldn = str(st.session_state.sea_df.iloc[1]["Select"])
     fuel_price = float(aktif_fiyatlar.get(sea_fuel_type_ldn, 0.0))
 
-    # --- 1. SEYİR (AT SEA) HESAPLAMALARI ---
+# --- 1. SEYİR (AT SEA) HESAPLAMALARI ---
     sea_legs = []
     total_sea_days = 0.0
     total_sea_cost = 0.0
@@ -454,13 +454,21 @@ if hesapla_basildi:
             fuel_mts = days * cons_ldn
             
         cost = fuel_mts * fuel_price
+        
+        # YENİ EKLENEN KURAL: Eğer ilk satırsa ve mesafe 0 ise bu bacağı atla (Gemi zaten oradadır)
+        if idx == 0 and dist == 0:
+            prev_port = port_name
+            continue
+            
         total_sea_days += days
         total_sea_cost += cost
         
+        # Eğer ilk satırsa (ama mesafe > 0 ise) Ballast yaz, değilse Liman - Liman formatında yaz
         leg_name = f"{prev_port} - {port_name}" if idx > 0 else f"Ballast -> {port_name}"
         sea_legs.append({"At Sea": leg_name, "Duration (days)": days, "Bunker Cons. (USD)": cost})
         prev_port = port_name
 
+    
     # --- 2. LİMAN (AT PORT) HESAPLAMALARI ---
     port_ops = []
     total_port_days = 0.0
