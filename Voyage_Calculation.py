@@ -392,6 +392,7 @@ with col_t3:
     )
     st.session_state.ld_details_df = current_ld
     
+
 # =====================================================================
 # HESAPLAMA BUTONU VE MATEMATİKSEL İŞLEMLER
 # =====================================================================
@@ -505,7 +506,8 @@ if hesapla_basildi:
 
     # --- 3. DİĞER HESAPLAMALAR ---
     gross_freight = f_rate * q if freight_term == "pmt" else f_rate
-    total_revenue = gross_freight + demurrage
+    # DİKKAT: Demurrage değeri Calculation hesabından çıkarıldı, Revenue'ya sadece Freight eklendi.
+    total_revenue = gross_freight 
 
     commissions = gross_freight * ((add_comm + broker_comm) / 100.0)
     total_pda = st.session_state.port_charges_df["PDA"].sum()
@@ -518,14 +520,14 @@ if hesapla_basildi:
     op_profit = total_revenue - total_opex
     tce = op_profit / total_days if total_days > 0 else 0.0
 
-    # Analiz Matrisleri için 5. Bölüme Veri Gönderimi (Base Values)
+    # Analiz Matrisleri için 5. Bölüme Veri Gönderimi
     st.session_state.base_f = f_rate
     st.session_state.base_q = q
     st.session_state.base_d = total_days
     comm_pct = (add_comm + broker_comm) / 100.0
     st.session_state.comm_multiplier = comm_pct
     st.session_state.base_fixed_opex = total_opex - commissions
-    st.session_state.demurrage_val = demurrage
+    st.session_state.demurrage_val = 0.0 # Demurrage hesaba katılmayacak
     st.session_state.tce_val = tce
     st.session_state.calc_done = True
 
@@ -562,7 +564,9 @@ def render_html_table(df, right_cols):
     html += '</tr></thead><tbody>'
     
     for i, row in df.iterrows():
-        is_total = str(row[df.columns[0]]).strip().upper() == "TOTAL"
+        first_col_val = str(row[df.columns[0]]).strip().upper()
+        # TOTAL veya GRAND TOTAL ise bold ve gri arka plan yap
+        is_total = first_col_val in ["TOTAL", "GRAND TOTAL"]
         fw = "bold" if is_total else "normal"
         bg = "#f9f9f9" if is_total else "transparent"
         
@@ -579,6 +583,7 @@ calc_col1, calc_col2, calc_col3 = st.columns([2.5, 1.2, 1.2])
 with calc_col1:
     st.markdown("<div style='text-align: center; font-weight: bold; background-color: #f0f2f6; color: black; padding: 5px; margin-bottom: 5px;'>Voyage Summary</div>", unsafe_allow_html=True)
     
+    # --- TABLO 1: AT SEA ---
     sea_list = []
     if "sea_legs_data" in st.session_state and st.session_state.sea_legs_data:
         for leg in st.session_state.sea_legs_data:
@@ -590,8 +595,7 @@ with calc_col1:
     sea_df = pd.DataFrame(sea_list, columns=["At Sea", "Duration (days)", "Bunker Cons. (USD)"])
     st.markdown(render_html_table(sea_df, ["Duration (days)", "Bunker Cons. (USD)"]), unsafe_allow_html=True)
 
-    st.write("") 
-
+    # --- TABLO 2: AT PORT ---
     port_list = []
     if "port_ops_data" in st.session_state and st.session_state.port_ops_data:
         for pop in st.session_state.port_ops_data:
@@ -602,6 +606,16 @@ with calc_col1:
 
     port_df = pd.DataFrame(port_list, columns=["At Port", "Duration (days)", "Bunker Cons. (USD)"])
     st.markdown(render_html_table(port_df, ["Duration (days)", "Bunker Cons. (USD)"]), unsafe_allow_html=True)
+
+    # --- TABLO 3: VOYAGE TOTAL (YENİ GRAND TOTAL TABLOSU) ---
+    vtot_list = [
+        ["At Sea", format_tr(st.session_state.res_summary['sea_days']), format_tr(st.session_state.res_summary['sea_cost'])],
+        ["At Port", format_tr(st.session_state.res_summary['port_days']), format_tr(st.session_state.res_summary['port_cost'])],
+        ["Grand Total", format_tr(st.session_state.res_summary['total_days']), format_tr(st.session_state.res_summary['sea_cost'] + st.session_state.res_summary['port_cost'])]
+    ]
+    vtot_df = pd.DataFrame(vtot_list, columns=["Voyage Total", "Duration (days)", "Bunker Cons. (USD)"])
+    st.markdown(render_html_table(vtot_df, ["Duration (days)", "Bunker Cons. (USD)"]), unsafe_allow_html=True)
+
 
 with calc_col2:
     st.markdown("<div style='text-align: center; font-weight: bold; background-color: #f0f2f6; color: black; padding: 5px; margin-bottom: 5px;'>Operational Expenses</div>", unsafe_allow_html=True)
@@ -619,21 +633,24 @@ with calc_col3:
     st.markdown("<div style='text-align: center; font-weight: bold; background-color: #f0f2f6; color: black; padding: 5px; margin-bottom: 5px;'>Revenue</div>", unsafe_allow_html=True)
     
     rev = st.session_state.res_revenue
-    dem = demurrage if "demurrage" in locals() else 0.0
+    dem = 0.0 # Demurrage sıfırlandı
     
     rev_df = pd.DataFrame({
         "Item": ["Freight", "Demurrage", "TOTAL"],
-        "Amount": [f"$ {format_tr(rev - dem)}", f"$ {format_tr(dem)}", f"$ {format_tr(rev)}"]
+        "Amount": [f"$ {format_tr(rev)}", f"$ {format_tr(dem)}", f"$ {format_tr(rev)}"] # Demurrage sıfır olduğu için TOTAL sadece Freight'e eşit.
     })
     st.markdown(render_html_table(rev_df, ["Amount"]), unsafe_allow_html=True)
     
     st.markdown("<div style='text-align: center; font-weight: bold; background-color: #f0f2f6; color: black; padding: 5px; margin-bottom: 5px;'>RESULT</div>", unsafe_allow_html=True)
+    
+    # Result Tablosuna "Duration" satırı eklendi
     res_df = pd.DataFrame({
-        "Metric": ["Total Revenue", "Total Op. Expens.", "Operational Profit", "Daily Profit (TCE)"],
+        "Metric": ["Total Revenue", "Total Op. Expens.", "Operational Profit", "Duration", "Daily Profit (TCE)"],
         "Value": [
             f"$ {format_tr(st.session_state.res_revenue)}", 
             f"$ {format_tr(st.session_state.res_opex)}", 
             f"$ {format_tr(st.session_state.res_profit)}", 
+            f"{format_tr(st.session_state.res_summary['total_days'])} days",
             f"$ {format_tr(st.session_state.res_tce)}"
         ]
     })
@@ -651,12 +668,12 @@ if st.session_state.get("calc_done", False):
         gross_freight = f * q 
         comm = gross_freight * st.session_state.comm_multiplier
         opex = st.session_state.base_fixed_opex + comm
-        revenue = gross_freight + st.session_state.demurrage_val
+        revenue = gross_freight + st.session_state.demurrage_val # Demurrage 0 olarak alındı
         profit = revenue - opex
         tce = profit / d if d > 0 else 0
         return tce - rc
 
-    # Matris Görselini (HTML) Yaratan Fonksiyon
+    # Matris Görselini (HTML) Yaratan Fonksiyon (Kalın Fontlar Eklendi)
     def generate_matrix_html(matrix_type, f_base, var_base, d_base, f_step, var_step, rc):
         f_vals = [f_base + (i - 5) * f_step for i in range(11)]
         v_vals = [var_base + (i - 4) * var_step for i in range(9)]
@@ -679,8 +696,11 @@ if st.session_state.get("calc_done", False):
                     val = get_matrix_ndp(f, v, d_base, rc)
                 else:
                     val = get_matrix_ndp(f, st.session_state.base_q, v, rc)
-                    
-                html += f'<td style="border: 1px solid #ccc; background-color: {cell_bg}; padding: 4px;">{format_tr(val)}</td>'
+                
+                # YENİ KURAL: Orta Satır (r_idx == 5) veya Orta Sütun (c_idx == 4) ise hücre BOLD olacak.
+                fw_cell = "bold" if (r_idx == 5 or c_idx == 4) else "normal"    
+                
+                html += f'<td style="border: 1px solid #ccc; background-color: {cell_bg}; font-weight: {fw_cell}; padding: 4px;">{format_tr(val)}</td>'
             html += '</tr>'
         html += '</table>'
         return html
