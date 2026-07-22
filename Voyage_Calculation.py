@@ -530,6 +530,29 @@ if hesapla_basildi:
 # =====================================================================
 st.markdown('<p class="main-header">4 - Calculation & Strategy</p>', unsafe_allow_html=True)
 
+# Özel Tablo Çizdirme Fonksiyonu (Sağa dayama ve Styler bug'ını çözmek için HTML kullanıyoruz)
+def render_html_table(df, right_cols):
+    html = '<table style="width:100%; border-collapse: collapse; font-size: 14px; margin-bottom: 20px; color: black;">'
+    html += '<thead><tr style="background-color: #f0f2f6; border-bottom: 2px solid #ddd;">'
+    for col in df.columns:
+        align = 'right' if col in right_cols else 'left'
+        html += f'<th style="text-align: {align}; padding: 8px;">{col}</th>'
+    html += '</tr></thead><tbody>'
+    
+    for i, row in df.iterrows():
+        # Eğer satırın ilk kelimesi TOTAL ise o satırı kalın (bold) yap ve arka planı grileştir
+        is_total = str(row[df.columns[0]]).strip().upper() == "TOTAL"
+        fw = "bold" if is_total else "normal"
+        bg = "#f9f9f9" if is_total else "transparent"
+        
+        html += f'<tr style="border-bottom: 1px solid #eee; background-color: {bg}; font-weight: {fw};">'
+        for col in df.columns:
+            align = 'right' if col in right_cols else 'left'
+            html += f'<td style="text-align: {align}; padding: 8px;">{row[col]}</td>'
+        html += '</tr>'
+    html += '</tbody></table>'
+    return html
+
 calc_col1, calc_col2, calc_col3 = st.columns([2.5, 1.2, 1.2])
 
 with calc_col1:
@@ -545,9 +568,7 @@ with calc_col1:
         sea_list = [["TOTAL", "0,00", "0,00"]]
 
     sea_df = pd.DataFrame(sea_list, columns=["At Sea", "Duration (days)", "Bunker Cons. (USD)"])
-    # Sayıları Sağa Dayama İşlemi
-    styled_sea = sea_df.style.set_properties(**{'text-align': 'right'}, subset=["Duration (days)", "Bunker Cons. (USD)"])
-    st.dataframe(styled_sea, hide_index=True, use_container_width=True)
+    st.markdown(render_html_table(sea_df, ["Duration (days)", "Bunker Cons. (USD)"]), unsafe_allow_html=True)
 
     st.write("") # İki tablo arasına boşluk
 
@@ -561,9 +582,7 @@ with calc_col1:
         port_list = [["TOTAL", "0,00", "0,00"]]
 
     port_df = pd.DataFrame(port_list, columns=["At Port", "Duration (days)", "Bunker Cons. (USD)"])
-    # Sayıları Sağa Dayama İşlemi
-    styled_port = port_df.style.set_properties(**{'text-align': 'right'}, subset=["Duration (days)", "Bunker Cons. (USD)"])
-    st.dataframe(styled_port, hide_index=True, use_container_width=True)
+    st.markdown(render_html_table(port_df, ["Duration (days)", "Bunker Cons. (USD)"]), unsafe_allow_html=True)
 
 with calc_col2:
     st.markdown("<div style='text-align: center; font-weight: bold; background-color: #f0f2f6; color: black; padding: 5px; margin-bottom: 5px;'>Operational Expenses</div>", unsafe_allow_html=True)
@@ -575,8 +594,7 @@ with calc_col2:
         "Item": ["Bunker Expense", "Port Charges", "Freight Tax", "Liner IN", "Liner OUT", "Despatch", "Strait / Canal Exp.", "Extra Insurance", "Cargo Survey", "Other", "Add Comm.", "Brkg Comm.", "TOTAL"],
         "Cost": formatted_opex
     })
-    styled_opex = op_exp_df.style.set_properties(**{'text-align': 'right'}, subset=["Cost"])
-    st.dataframe(styled_opex, hide_index=True, use_container_width=True, height=520)
+    st.markdown(render_html_table(op_exp_df, ["Cost"]), unsafe_allow_html=True)
 
 with calc_col3:
     st.markdown("<div style='text-align: center; font-weight: bold; background-color: #f0f2f6; color: black; padding: 5px; margin-bottom: 5px;'>Revenue</div>", unsafe_allow_html=True)
@@ -588,8 +606,7 @@ with calc_col3:
         "Item": ["Freight", "Demurrage", "TOTAL"],
         "Amount": [f"$ {format_tr(rev - dem)}", f"$ {format_tr(dem)}", f"$ {format_tr(rev)}"]
     })
-    styled_rev = rev_df.style.set_properties(**{'text-align': 'right'}, subset=["Amount"])
-    st.dataframe(styled_rev, hide_index=True, use_container_width=True)
+    st.markdown(render_html_table(rev_df, ["Amount"]), unsafe_allow_html=True)
     
     st.markdown("<div style='text-align: center; font-weight: bold; background-color: #f0f2f6; color: black; padding: 5px; margin-bottom: 5px;'>RESULT</div>", unsafe_allow_html=True)
     res_df = pd.DataFrame({
@@ -601,8 +618,7 @@ with calc_col3:
             f"$ {format_tr(st.session_state.res_tce)}"
         ]
     })
-    styled_res = res_df.style.set_properties(**{'text-align': 'right'}, subset=["Value"])
-    st.dataframe(styled_res, hide_index=True, use_container_width=True)
+    st.markdown(render_html_table(res_df, ["Value"]), unsafe_allow_html=True)
     
     st.write("")
     st.metric(label="🎯 Break-even Freight", value=f"$ {format_tr(st.session_state.res_breakeven)} / mt", delta="- Zarar Sınırı", delta_color="inverse")
