@@ -402,6 +402,14 @@ _, calc_btn_col, _ = st.columns([2, 2, 2])
 with calc_btn_col:
     hesapla_basildi = st.button("🚀 CALCULATE VOYAGE", type="primary", use_container_width=True)
 
+# 5. Bölüm İçin Gerekli Hafıza Değişkenleri
+if "rc_input" not in st.session_state: st.session_state.rc_input = 0.0
+if "fc_1" not in st.session_state: st.session_state.fc_1 = 0.5
+if "tc_1" not in st.session_state: st.session_state.tc_1 = 100.0
+if "fc_2" not in st.session_state: st.session_state.fc_2 = 0.5
+if "dc_2" not in st.session_state: st.session_state.dc_2 = 1.0
+if "calc_done" not in st.session_state: st.session_state.calc_done = False
+
 if "res_summary" not in st.session_state:
     st.session_state.res_summary = {"total_days": 0.0, "sea_days": 0.0, "port_days": 0.0, "sea_cost": 0.0, "port_cost": 0.0}
     st.session_state.sea_legs_data = [] 
@@ -428,7 +436,7 @@ if hesapla_basildi:
     sea_fuel_type_ldn = str(st.session_state.sea_df.iloc[1]["Select"])
     fuel_price = float(aktif_fiyatlar.get(sea_fuel_type_ldn, 0.0))
 
-# --- 1. SEYİR (AT SEA) HESAPLAMALARI ---
+    # --- 1. SEYİR (AT SEA) HESAPLAMALARI ---
     sea_legs = []
     total_sea_days = 0.0
     total_sea_cost = 0.0
@@ -455,7 +463,7 @@ if hesapla_basildi:
             
         cost = fuel_mts * fuel_price
         
-        # YENİ EKLENEN KURAL: Eğer ilk satırsa ve mesafe 0 ise bu bacağı atla (Gemi zaten oradadır)
+        # İlk satırsa ve mesafe 0 ise bu bacağı atla (Gemi zaten oradadır)
         if idx == 0 and dist == 0:
             prev_port = port_name
             continue
@@ -463,12 +471,10 @@ if hesapla_basildi:
         total_sea_days += days
         total_sea_cost += cost
         
-        # Eğer ilk satırsa (ama mesafe > 0 ise) Ballast yaz, değilse Liman - Liman formatında yaz
         leg_name = f"{prev_port} - {port_name}" if idx > 0 else f"Ballast -> {port_name}"
         sea_legs.append({"At Sea": leg_name, "Duration (days)": days, "Bunker Cons. (USD)": cost})
         prev_port = port_name
 
-    
     # --- 2. LİMAN (AT PORT) HESAPLAMALARI ---
     port_ops = []
     total_port_days = 0.0
@@ -511,7 +517,17 @@ if hesapla_basildi:
 
     op_profit = total_revenue - total_opex
     tce = op_profit / total_days if total_days > 0 else 0.0
-    breakeven = total_opex / q if q > 0 else 0.0
+
+    # Analiz Matrisleri için 5. Bölüme Veri Gönderimi (Base Values)
+    st.session_state.base_f = f_rate
+    st.session_state.base_q = q
+    st.session_state.base_d = total_days
+    comm_pct = (add_comm + broker_comm) / 100.0
+    st.session_state.comm_multiplier = comm_pct
+    st.session_state.base_fixed_opex = total_opex - commissions
+    st.session_state.demurrage_val = demurrage
+    st.session_state.tce_val = tce
+    st.session_state.calc_done = True
 
     st.session_state.sea_legs_data = sea_legs
     st.session_state.port_ops_data = port_ops
@@ -523,7 +539,6 @@ if hesapla_basildi:
     st.session_state.res_opex = total_opex
     st.session_state.res_profit = op_profit
     st.session_state.res_tce = tce
-    st.session_state.res_breakeven = breakeven
     st.session_state.res_bunker_cost = total_bunker_cost
     st.session_state.res_opex_details = [
         total_bunker_cost, total_pda, freight_tax, total_liner, 0.0, 
@@ -531,14 +546,13 @@ if hesapla_basildi:
         gross_freight * (add_comm/100), gross_freight * (broker_comm/100), total_opex
     ]
     st.toast("Sefer hesaplaması başarıyla tamamlandı!", icon="📈")
-    
+
 
 # =====================================================================
 # BÖLÜM 4: CALCULATION & STRATEGY (SONUÇ EKRANI)
 # =====================================================================
 st.markdown('<p class="main-header">4 - Calculation & Strategy</p>', unsafe_allow_html=True)
 
-# Özel Tablo Çizdirme Fonksiyonu (Sağa dayama ve Styler bug'ını çözmek için HTML kullanıyoruz)
 def render_html_table(df, right_cols):
     html = '<table style="width:100%; border-collapse: collapse; font-size: 14px; margin-bottom: 20px; color: black;">'
     html += '<thead><tr style="background-color: #f0f2f6; border-bottom: 2px solid #ddd;">'
@@ -548,7 +562,6 @@ def render_html_table(df, right_cols):
     html += '</tr></thead><tbody>'
     
     for i, row in df.iterrows():
-        # Eğer satırın ilk kelimesi TOTAL ise o satırı kalın (bold) yap ve arka planı grileştir
         is_total = str(row[df.columns[0]]).strip().upper() == "TOTAL"
         fw = "bold" if is_total else "normal"
         bg = "#f9f9f9" if is_total else "transparent"
@@ -566,7 +579,6 @@ calc_col1, calc_col2, calc_col3 = st.columns([2.5, 1.2, 1.2])
 with calc_col1:
     st.markdown("<div style='text-align: center; font-weight: bold; background-color: #f0f2f6; color: black; padding: 5px; margin-bottom: 5px;'>Voyage Summary</div>", unsafe_allow_html=True)
     
-    # --- TABLO 1: AT SEA (SEYİR) ---
     sea_list = []
     if "sea_legs_data" in st.session_state and st.session_state.sea_legs_data:
         for leg in st.session_state.sea_legs_data:
@@ -578,9 +590,8 @@ with calc_col1:
     sea_df = pd.DataFrame(sea_list, columns=["At Sea", "Duration (days)", "Bunker Cons. (USD)"])
     st.markdown(render_html_table(sea_df, ["Duration (days)", "Bunker Cons. (USD)"]), unsafe_allow_html=True)
 
-    st.write("") # İki tablo arasına boşluk
+    st.write("") 
 
-    # --- TABLO 2: AT PORT (LİMAN) ---
     port_list = []
     if "port_ops_data" in st.session_state and st.session_state.port_ops_data:
         for pop in st.session_state.port_ops_data:
@@ -627,6 +638,121 @@ with calc_col3:
         ]
     })
     st.markdown(render_html_table(res_df, ["Value"]), unsafe_allow_html=True)
+
+
+# =====================================================================
+# BÖLÜM 5: ANALYSIS & STRATEGY
+# =====================================================================
+if st.session_state.get("calc_done", False):
+    st.markdown('<p class="main-header">5 - Analysis & Strategy</p>', unsafe_allow_html=True)
+
+    # Arka Plan Hesaplama Fonksiyonu (Net Daily Profit)
+    def get_matrix_ndp(f, q, d, rc):
+        gross_freight = f * q 
+        comm = gross_freight * st.session_state.comm_multiplier
+        opex = st.session_state.base_fixed_opex + comm
+        revenue = gross_freight + st.session_state.demurrage_val
+        profit = revenue - opex
+        tce = profit / d if d > 0 else 0
+        return tce - rc
+
+    # Matris Görselini (HTML) Yaratan Fonksiyon
+    def generate_matrix_html(matrix_type, f_base, var_base, d_base, f_step, var_step, rc):
+        f_vals = [f_base + (i - 5) * f_step for i in range(11)]
+        v_vals = [var_base + (i - 4) * var_step for i in range(9)]
+        
+        html = '<table style="width:100%; border-collapse: collapse; font-size: 13px; text-align: center; border: 1px solid #ccc; background-color: white; color: black;">'
+        html += '<tr><th style="border: 1px solid #ccc; background-color: #f0f2f6; padding: 4px;"></th>'
+        for v in v_vals:
+            html += f'<th style="border: 1px solid #ccc; background-color: #f0f2f6; padding: 4px;">{format_tr(v, is_int=(matrix_type=="tonnage"))}</th>'
+        html += '</tr>'
+        
+        for r_idx, f in enumerate(f_vals):
+            row_bg = "#d9e1f2" if r_idx == 5 else "transparent"
+            html += f'<tr><td style="border: 1px solid #ccc; background-color: #f0f2f6; font-weight: bold; padding: 4px;">{format_tr(f)}</td>'
+            for c_idx, v in enumerate(v_vals):
+                cell_bg = row_bg
+                if c_idx == 4:
+                    cell_bg = "#ffe699" if r_idx == 5 else "#d9e1f2"
+                    
+                if matrix_type == 'tonnage':
+                    val = get_matrix_ndp(f, v, d_base, rc)
+                else:
+                    val = get_matrix_ndp(f, st.session_state.base_q, v, rc)
+                    
+                html += f'<td style="border: 1px solid #ccc; background-color: {cell_bg}; padding: 4px;">{format_tr(val)}</td>'
+            html += '</tr>'
+        html += '</table>'
+        return html
+
+    # Anlık Metrik Değerleri
+    daily_profit = st.session_state.tce_val
+    rc = st.session_state.rc_input
+    net_daily_profit = daily_profit - rc
     
+    # Break-Even Matematiksel Hesabı (Net Daily Profit = 0 Noktası)
+    divisor = st.session_state.base_q * (1.0 - st.session_state.comm_multiplier)
+    if divisor > 0:
+        be_point = ((rc * st.session_state.base_d) + st.session_state.base_fixed_opex - st.session_state.demurrage_val) / divisor 
+    else:
+        be_point = 0.0
+
     st.write("")
-    st.metric(label="🎯 Break-even Freight", value=f"$ {format_tr(st.session_state.res_breakeven)} / mt", delta="- Zarar Sınırı", delta_color="inverse")
+    
+    # ÜST PANEL: Özet ve R/C Girişi
+    top1, top2, top3, top4 = st.columns([1.2, 1.2, 0.5, 4])
+    with top1:
+        st.markdown("<div style='line-height:2.6;'><b>Daily Profit (TCE)</b></div>", unsafe_allow_html=True)
+        st.markdown("<div style='line-height:2.6;'><b>R/C</b></div>", unsafe_allow_html=True)
+        st.markdown("<div style='line-height:2.6;'><b>Net Daily Profit</b></div>", unsafe_allow_html=True)
+        st.markdown("<div style='line-height:2.6;'><b>Break-Even Point</b></div>", unsafe_allow_html=True)
+    with top2:
+        st.markdown(f"<div style='line-height:2.6; text-align:right;'>{format_tr(daily_profit)}</div>", unsafe_allow_html=True)
+        new_rc = st.number_input("RC", value=st.session_state.rc_input, step=500.0, label_visibility="collapsed")
+        st.markdown(f"<div style='line-height:2.6; text-align:right;'>{format_tr(net_daily_profit)}</div>", unsafe_allow_html=True)
+        st.markdown(f"<div style='line-height:2.6; text-align:right;'>{format_tr(be_point)}</div>", unsafe_allow_html=True)
+    with top3:
+        st.markdown("<div style='line-height:2.6;'>usd</div>", unsafe_allow_html=True)
+        st.markdown("<div style='line-height:2.6;'>usd</div>", unsafe_allow_html=True)
+        st.markdown("<div style='line-height:2.6;'>usd</div>", unsafe_allow_html=True)
+        st.markdown("<div style='line-height:2.6;'>usd</div>", unsafe_allow_html=True)
+    with top4:
+        st.write("")
+        update_btn = st.button("🔄 Update Analysis", type="secondary")
+        
+    if update_btn:
+        st.session_state.rc_input = new_rc
+        st.rerun()
+
+    st.write("---")
+
+    # ALT PANEL: Hassasiyet (Sensitivity) Matrisleri
+    mat_col1, mat_col2 = st.columns(2)
+    
+    with mat_col1:
+        c1, c2 = st.columns(2)
+        with c1:
+            fc1 = st.number_input("Freight Change (usd)", value=st.session_state.fc_1, step=0.1, key="f_ch1")
+        with c2:
+            tc1 = st.number_input("Tonnage Change (mts)", value=st.session_state.tc_1, step=100.0, key="t_ch1")
+            
+        st.markdown("<div style='text-align: center; font-weight: bold; margin-bottom: 5px;'>Freight (usd) / Tonnage (mts) Matris</div>", unsafe_allow_html=True)
+        html_tonnage = generate_matrix_html('tonnage', st.session_state.base_f, st.session_state.base_q, st.session_state.base_d, fc1, tc1, new_rc)
+        st.markdown(html_tonnage, unsafe_allow_html=True)
+        
+    with mat_col2:
+        c3, c4 = st.columns(2)
+        with c3:
+            fc2 = st.number_input("Freight Change (usd)", value=st.session_state.fc_2, step=0.1, key="f_ch2")
+        with c4:
+            dc2 = st.number_input("Duration Change (days)", value=st.session_state.dc_2, step=1.0, key="d_ch2")
+            
+        st.markdown("<div style='text-align: center; font-weight: bold; margin-bottom: 5px;'>Freight (usd) / Duration (days) Matris</div>", unsafe_allow_html=True)
+        html_duration = generate_matrix_html('duration', st.session_state.base_f, st.session_state.base_d, st.session_state.base_d, fc2, dc2, new_rc)
+        st.markdown(html_duration, unsafe_allow_html=True)
+        
+    # Inputlardaki değişikliklerin (butona basılmasa da) arka planda hafızaya alınması
+    st.session_state.fc_1 = fc1
+    st.session_state.tc_1 = tc1
+    st.session_state.fc_2 = fc2
+    st.session_state.dc_2 = dc2
