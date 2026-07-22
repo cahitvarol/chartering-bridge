@@ -262,7 +262,7 @@ with cp1:
 with cp2:
     freight_term = st.selectbox("Freight Term", ["pmt", "lumpsum"])
     terms = st.selectbox("Terms", ["FIO", "FIOS", "FIOST", "LIFO", "FILO", "LILO"], index=2)
-    gear = st.selectbox("Gear", ["Geared", "Gearless"])
+    gear = st.selectbox("Gear", ["Gearless", "Geared"])
     laycan_date = st.date_input("Laycan", value=date.today(), format="DD.MM.YYYY")
     st.markdown(f"<span style='color:#c5a059; font-size:14px; font-weight:bold;'>{laycan_date.strftime('%d %B %Y, %A')}</span>", unsafe_allow_html=True)
 with cp3:
@@ -403,8 +403,9 @@ with calc_btn_col:
     hesapla_basildi = st.button("🚀 CALCULATE VOYAGE", type="primary", use_container_width=True)
 
 if "res_summary" not in st.session_state:
-    st.session_state.res_summary = {"total_days": 0.0, "sea_days": 0.0, "port_days": 0.0}
-    st.session_state.voyage_legs_data = [] 
+    st.session_state.res_summary = {"total_days": 0.0, "sea_days": 0.0, "port_days": 0.0, "sea_cost": 0.0, "port_cost": 0.0}
+    st.session_state.sea_legs_data = [] 
+    st.session_state.port_ops_data = []
     st.session_state.res_revenue = 0.0
     st.session_state.res_opex = 0.0
     st.session_state.res_profit = 0.0
@@ -421,14 +422,16 @@ if hesapla_basildi:
     spd_ldn = float(st.session_state.sea_df.iloc[1]["Speed"]) if float(st.session_state.sea_df.iloc[1]["Speed"]) > 0 else 1.0
     cons_bal = float(st.session_state.sea_df.iloc[0]["Cons"])
     cons_ldn = float(st.session_state.sea_df.iloc[1]["Cons"])
-    
     cons_port_work = float(st.session_state.port_df.iloc[1]["Cons"])
 
     aktif_fiyatlar = st.session_state.bunker_df[st.session_state.bunker_df["Seç"] == True].iloc[0]
+    sea_fuel_type_ldn = str(st.session_state.sea_df.iloc[1]["Select"])
+    fuel_price = float(aktif_fiyatlar.get(sea_fuel_type_ldn, 0.0))
 
-    # --- BACAK (LEG) BAZLI SÜRE VE MESAFE HESABI ---
-    voyage_legs = []
+    # --- 1. SEYİR (AT SEA) HESAPLAMALARI ---
+    sea_legs = []
     total_sea_days = 0.0
+    total_sea_cost = 0.0
     
     port_names = []
     for i, r in st.session_state.port_rotation_df.iterrows():
@@ -445,21 +448,28 @@ if hesapla_basildi:
         
         if port_type in ["Ballast Port", "Load Port", "Return Ballast"]:
             days = (dist / (spd_bal * 24)) * (1 + margin)
+            fuel_mts = days * cons_bal
         else:
             days = (dist / (spd_ldn * 24)) * (1 + margin)
+            fuel_mts = days * cons_ldn
             
+        cost = fuel_mts * fuel_price
         total_sea_days += days
-        leg_name = f"{prev_port} - {port_name}" if idx > 0 else f"Ballast -> {port_name}"
+        total_sea_cost += cost
         
-        voyage_legs.append({
-            "Leg": leg_name,
-            "Sea Days": days,
-            "Port Days": 0.0 
-        })
+        leg_name = f"{prev_port} - {port_name}" if idx > 0 else f"Ballast -> {port_name}"
+        sea_legs.append({"At Sea": leg_name, "Duration (days)": days, "Bunker Cons. (USD)": cost})
         prev_port = port_name
 
+    # --- 2. LİMAN (AT PORT) HESAPLAMALARI ---
+    port_ops = []
     total_port_days = 0.0
+    total_port_cost = 0.0
+    
     for idx, row in st.session_state.ld_details_df.iterrows():
+        p_name = str(row.get("Port Name", "")).strip()
+        if not p_name: p_name = f"Port {idx+1}"
+        
         rate = float(row.get("Rate", 0.0))
         ex_days = float(row.get("Extra Days", 0.0))
         unit = str(row.get("Unit", ""))
@@ -469,21 +479,17 @@ if hesapla_basildi:
         else:
             p_days = rate + ex_days
             
+        fuel_mts = p_days * cons_port_work
+        cost = fuel_mts * fuel_price
+        
+        port_ops.append({"At Port": p_name, "Duration (days)": p_days, "Bunker Cons. (USD)": cost})
         total_port_days += p_days
-        if idx < len(voyage_legs):
-            voyage_legs[idx]["Port Days"] = p_days
+        total_port_cost += cost
 
     total_days = total_sea_days + total_port_days
+    total_bunker_cost = total_sea_cost + total_port_cost
 
-    # --- DİĞER HESAPLAMALAR ---
-    sea_fuel_type_ldn = str(st.session_state.sea_df.iloc[1]["Select"])
-    total_sea_fuel_mts = ((total_sea_days / 2) * cons_bal) + ((total_sea_days / 2) * cons_ldn)
-    total_port_fuel_mts = total_port_days * cons_port_work
-    total_fuel_mts = total_sea_fuel_mts + total_port_fuel_mts
-    
-    fuel_price = float(aktif_fiyatlar.get(sea_fuel_type_ldn, 0.0))
-    total_bunker_cost = total_fuel_mts * fuel_price
-
+    # --- 3. DİĞER HESAPLAMALAR ---
     gross_freight = f_rate * q if freight_term == "pmt" else f_rate
     total_revenue = gross_freight + demurrage
 
@@ -499,8 +505,12 @@ if hesapla_basildi:
     tce = op_profit / total_days if total_days > 0 else 0.0
     breakeven = total_opex / q if q > 0 else 0.0
 
-    st.session_state.voyage_legs_data = voyage_legs
-    st.session_state.res_summary = {"total_days": total_days, "sea_days": total_sea_days, "port_days": total_port_days}
+    st.session_state.sea_legs_data = sea_legs
+    st.session_state.port_ops_data = port_ops
+    st.session_state.res_summary = {
+        "total_days": total_days, "sea_days": total_sea_days, "port_days": total_port_days,
+        "sea_cost": total_sea_cost, "port_cost": total_port_cost
+    }
     st.session_state.res_revenue = total_revenue
     st.session_state.res_opex = total_opex
     st.session_state.res_profit = op_profit
@@ -513,7 +523,7 @@ if hesapla_basildi:
         gross_freight * (add_comm/100), gross_freight * (broker_comm/100), total_opex
     ]
     st.toast("Sefer hesaplaması başarıyla tamamlandı!", icon="📈")
-
+    
 
 # =====================================================================
 # BÖLÜM 4: CALCULATION & STRATEGY (SONUÇ EKRANI)
@@ -523,53 +533,53 @@ st.markdown('<p class="main-header">4 - Calculation & Strategy</p>', unsafe_allo
 calc_col1, calc_col2, calc_col3 = st.columns([2.5, 1.2, 1.2])
 
 with calc_col1:
-    st.markdown("<div style='text-align: center; font-weight: bold; background-color: #f0f2f6; color: black; padding: 5px;'>Voyage Summary</div>", unsafe_allow_html=True)
+    st.markdown("<div style='text-align: center; font-weight: bold; background-color: #f0f2f6; color: black; padding: 5px; margin-bottom: 5px;'>Voyage Summary</div>", unsafe_allow_html=True)
     
-    summary_list = []
-    if "voyage_legs_data" in st.session_state and st.session_state.voyage_legs_data:
-        for leg in st.session_state.voyage_legs_data:
-            leg_total = leg["Sea Days"] + leg["Port Days"]
-            summary_list.append([
-                leg["Leg"], 
-                format_tr(leg_total), 
-                format_tr(leg["Sea Days"]), 
-                format_tr(leg["Port Days"])
-            ])
-        
-        # En Alta Toplam Satırını Ekle
-        summary_list.append([
-            "TOTAL VOYAGE", 
-            format_tr(st.session_state.res_summary['total_days']), 
-            format_tr(st.session_state.res_summary['sea_days']), 
-            format_tr(st.session_state.res_summary['port_days'])
-        ])
+    # --- TABLO 1: AT SEA (SEYİR) ---
+    sea_list = []
+    if "sea_legs_data" in st.session_state and st.session_state.sea_legs_data:
+        for leg in st.session_state.sea_legs_data:
+            sea_list.append([leg["At Sea"], format_tr(leg["Duration (days)"]), format_tr(leg["Bunker Cons. (USD)"])])
+        sea_list.append(["TOTAL", format_tr(st.session_state.res_summary['sea_days']), format_tr(st.session_state.res_summary['sea_cost'])])
     else:
-        summary_list = [["TOTAL VOYAGE", "0,00", "0,00", "0,00"]]
+        sea_list = [["TOTAL", "0,00", "0,00"]]
 
-    bunker_calc_df = pd.DataFrame(
-        summary_list, 
-        columns=["Voyage Legs", "Total Duration", "Sea Days", "Port Days"]
-    )
-    st.dataframe(bunker_calc_df, hide_index=True, use_container_width=True)
-    
-    st.info(f"💡 **Bunker Cost (Total):** $ {format_tr(st.session_state.get('res_bunker_cost', 0.0))}")
+    sea_df = pd.DataFrame(sea_list, columns=["At Sea", "Duration (days)", "Bunker Cons. (USD)"])
+    # Sayıları Sağa Dayama İşlemi
+    styled_sea = sea_df.style.set_properties(**{'text-align': 'right'}, subset=["Duration (days)", "Bunker Cons. (USD)"])
+    st.dataframe(styled_sea, hide_index=True, use_container_width=True)
+
+    st.write("") # İki tablo arasına boşluk
+
+    # --- TABLO 2: AT PORT (LİMAN) ---
+    port_list = []
+    if "port_ops_data" in st.session_state and st.session_state.port_ops_data:
+        for pop in st.session_state.port_ops_data:
+            port_list.append([pop["At Port"], format_tr(pop["Duration (days)"]), format_tr(pop["Bunker Cons. (USD)"])])
+        port_list.append(["TOTAL", format_tr(st.session_state.res_summary['port_days']), format_tr(st.session_state.res_summary['port_cost'])])
+    else:
+        port_list = [["TOTAL", "0,00", "0,00"]]
+
+    port_df = pd.DataFrame(port_list, columns=["At Port", "Duration (days)", "Bunker Cons. (USD)"])
+    # Sayıları Sağa Dayama İşlemi
+    styled_port = port_df.style.set_properties(**{'text-align': 'right'}, subset=["Duration (days)", "Bunker Cons. (USD)"])
+    st.dataframe(styled_port, hide_index=True, use_container_width=True)
 
 with calc_col2:
-    st.markdown("<div style='text-align: center; font-weight: bold; background-color: #f0f2f6; color: black; padding: 5px;'>Operational Expenses</div>", unsafe_allow_html=True)
+    st.markdown("<div style='text-align: center; font-weight: bold; background-color: #f0f2f6; color: black; padding: 5px; margin-bottom: 5px;'>Operational Expenses</div>", unsafe_allow_html=True)
     
     opex_vals = st.session_state.res_opex_details if st.session_state.res_opex_details else [0.0] * 13
-    
-    # 10.000,00 formatına çeviriyoruz
     formatted_opex = [f"$ {format_tr(v)}" for v in opex_vals]
     
     op_exp_df = pd.DataFrame({
         "Item": ["Bunker Expense", "Port Charges", "Freight Tax", "Liner IN", "Liner OUT", "Despatch", "Strait / Canal Exp.", "Extra Insurance", "Cargo Survey", "Other", "Add Comm.", "Brkg Comm.", "TOTAL"],
         "Cost": formatted_opex
     })
-    st.dataframe(op_exp_df, hide_index=True, use_container_width=True, height=520)
+    styled_opex = op_exp_df.style.set_properties(**{'text-align': 'right'}, subset=["Cost"])
+    st.dataframe(styled_opex, hide_index=True, use_container_width=True, height=520)
 
 with calc_col3:
-    st.markdown("<div style='text-align: center; font-weight: bold; background-color: #f0f2f6; color: black; padding: 5px;'>Revenue</div>", unsafe_allow_html=True)
+    st.markdown("<div style='text-align: center; font-weight: bold; background-color: #f0f2f6; color: black; padding: 5px; margin-bottom: 5px;'>Revenue</div>", unsafe_allow_html=True)
     
     rev = st.session_state.res_revenue
     dem = demurrage if "demurrage" in locals() else 0.0
@@ -578,9 +588,10 @@ with calc_col3:
         "Item": ["Freight", "Demurrage", "TOTAL"],
         "Amount": [f"$ {format_tr(rev - dem)}", f"$ {format_tr(dem)}", f"$ {format_tr(rev)}"]
     })
-    st.dataframe(rev_df, hide_index=True, use_container_width=True)
+    styled_rev = rev_df.style.set_properties(**{'text-align': 'right'}, subset=["Amount"])
+    st.dataframe(styled_rev, hide_index=True, use_container_width=True)
     
-    st.markdown("<div style='text-align: center; font-weight: bold; background-color: #f0f2f6; color: black; padding: 5px;'>RESULT</div>", unsafe_allow_html=True)
+    st.markdown("<div style='text-align: center; font-weight: bold; background-color: #f0f2f6; color: black; padding: 5px; margin-bottom: 5px;'>RESULT</div>", unsafe_allow_html=True)
     res_df = pd.DataFrame({
         "Metric": ["Total Revenue", "Total Op. Expens.", "Operational Profit", "Daily Profit (TCE)"],
         "Value": [
@@ -590,7 +601,8 @@ with calc_col3:
             f"$ {format_tr(st.session_state.res_tce)}"
         ]
     })
-    st.dataframe(res_df, hide_index=True, use_container_width=True)
+    styled_res = res_df.style.set_properties(**{'text-align': 'right'}, subset=["Value"])
+    st.dataframe(styled_res, hide_index=True, use_container_width=True)
     
     st.write("")
     st.metric(label="🎯 Break-even Freight", value=f"$ {format_tr(st.session_state.res_breakeven)} / mt", delta="- Zarar Sınırı", delta_color="inverse")
