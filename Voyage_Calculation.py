@@ -136,10 +136,10 @@ with col_right:
         st.session_state.bunker_base = pd.DataFrame({
             "Seç": [True, False, False, False],
             "Liman": ["Istanbul", "Gibraltar", "3rd Port", "4th Port"],
-            "MGO %0,1": [1050.0, 1020.0, 0.0, 0.0],
-            "ULSFO %0,1": [820.0, 790.0, 0.0, 0.0],
-            "VLSFO %0,5": [640.0, 610.0, 0.0, 0.0],
-            "IFO380 %3,5": [580.0, 550.0, 0.0, 0.0]
+            "MGO %0,1": [1400.0, 1020.0, 0.0, 0.0],
+            "ULSFO %0,1": [900.0, 790.0, 0.0, 0.0],
+            "VLSFO %0,5": [897.0, 610.0, 0.0, 0.0],
+            "IFO380 %3,5": [720.0, 550.0, 0.0, 0.0]
         })
 
     # 2. Data Editor'u Base üzerinden çağır
