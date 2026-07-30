@@ -75,14 +75,22 @@ def fetch_vessel_data():
         return
 
     try:
-        # Sorgu kolonu imo_number olarak güncellendi
-        response = supabase.table("vesseldatabase").select("*").ilike("imo_number", f"%{imo_val}%").execute()
+        # 1. KORUMA: Kullanıcının harf veya boşluk girmesini engelliyoruz
+        if not imo_val.isdigit():
+            reset_vessel_data()
+            st.toast("IMO numarası sadece rakamlardan oluşmalıdır.", icon="⚠️")
+            return
+
+        # 2. DÖNÜŞÜM: Girdiğimiz metni sayıya (integer) çeviriyoruz
+        imo_int = int(imo_val)
+
+        # 3. SORGU: ilike (metin arama) yerine eq (equal/eşit) kullanıyoruz
+        response = supabase.table("vesseldatabase").select("*").eq("imo_number", imo_int).execute()
         data = response.data
         
         if data and len(data) > 0:
             v = data[0]
             
-            # Tüm key'ler yeni veritabanı yapınıza göre güncellendi
             st.session_state.v_name = str(v.get("name_of_ship", ""))
             st.session_state.v_type = str(v.get("type_of_ship", ""))
             st.session_state.v_flag = str(v.get("flag", ""))
@@ -106,7 +114,6 @@ def fetch_vessel_data():
     except Exception as e:
         reset_vessel_data()
         st.error(f"Sorgu hatası: {e}")
-
 
 # =====================================================================
 # BÖLÜM 1: GENERAL INFORMATION
