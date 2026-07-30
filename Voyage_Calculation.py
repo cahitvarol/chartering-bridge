@@ -75,26 +75,28 @@ def fetch_vessel_data():
         return
 
     try:
-        response = supabase.table("vesseldatabase").select("*").ilike("IMO Number", f"%{imo_val}%").execute()
+        # Sorgu kolonu imo_number olarak güncellendi
+        response = supabase.table("vesseldatabase").select("*").ilike("imo_number", f"%{imo_val}%").execute()
         data = response.data
         
         if data and len(data) > 0:
             v = data[0]
             
-            st.session_state.v_name = str(v.get("Name of Ship", ""))
-            st.session_state.v_type = str(v.get("Type of Ship", ""))
-            st.session_state.v_flag = str(v.get("Flag", ""))
-            st.session_state.v_class = str(v.get("Class", ""))
-            st.session_state.v_built = str(v.get("Year of Build", ""))
+            # Tüm key'ler yeni veritabanı yapınıza göre güncellendi
+            st.session_state.v_name = str(v.get("name_of_ship", ""))
+            st.session_state.v_type = str(v.get("type_of_ship", ""))
+            st.session_state.v_flag = str(v.get("flag", ""))
+            st.session_state.v_class = str(v.get("class", ""))
+            st.session_state.v_built = str(v.get("year_of_build", ""))
             
-            st.session_state.v_dwt = float(v.get("DWT", 0.0) or 0.0)
-            st.session_state.v_dwcc = float(v.get("DWCC", 0.0) or 0.0)
-            st.session_state.v_grain = float(v.get("Grain Cap (cuft)", 0.0) or 0.0)
-            st.session_state.v_bale = float(v.get("Bale Cap (cuft)", 0.0) or 0.0)
-            st.session_state.v_gt = float(v.get("Gross Tonnage", 0.0) or 0.0)
-            st.session_state.v_nt = float(v.get("Net Tonnage", 0.0) or 0.0)
-            st.session_state.v_loa = float(v.get("LOA", 0.0) or 0.0)
-            st.session_state.v_beam = float(v.get("Beam", 0.0) or 0.0)
+            st.session_state.v_dwt = float(v.get("dwt", 0.0) or 0.0)
+            st.session_state.v_dwcc = float(v.get("dwcc", 0.0) or 0.0)
+            st.session_state.v_grain = float(v.get("grain_cap_-cuft-", 0.0) or 0.0)
+            st.session_state.v_bale = float(v.get("bale_cap_-cuft-", 0.0) or 0.0)
+            st.session_state.v_gt = float(v.get("gross_tonnage", 0.0) or 0.0)
+            st.session_state.v_nt = float(v.get("net_tonnage", 0.0) or 0.0)
+            st.session_state.v_loa = float(v.get("loa", 0.0) or 0.0)
+            st.session_state.v_beam = float(v.get("beam", 0.0) or 0.0)
             
             st.toast(f"Gemi veritabanından çekildi: {st.session_state.v_name}", icon="✅")
         else:
