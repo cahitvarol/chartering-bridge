@@ -171,7 +171,7 @@ with col_right:
         edited_df["Seç"] = False
         edited_df.loc[changed_to_true[0], "Seç"] = True
         st.session_state.bunker_base = edited_df 
-        st.rerun() 
+        #st.rerun() 
 
     st.session_state.bunker_df = edited_df
 
