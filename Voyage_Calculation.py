@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime, date
 from supabase import create_client, Client
+import html  # XSS Güvenliği için eklendi
 
 # =====================================================================
 # SUPABASE BAĞLANTI AYARLARI (st.secrets ile Güvenli Hale Getirildi)
@@ -429,141 +430,145 @@ if hesapla_basildi:
     
     # HIZ KORUMASI (SPEED 0 KONTROLÜ)
     if spd_bal <= 0 or spd_ldn <= 0:
-        st.session_state.calc_done = False
         st.error("Lütfen geminin Speed (Hız) değerlerini 0'dan büyük giriniz!")
-        st.stop()
-        
-    cons_bal = float(st.session_state.sea_df.iloc[0]["Cons"])
-    cons_ldn = float(st.session_state.sea_df.iloc[1]["Cons"])
-    cons_port_work = float(st.session_state.port_df.iloc[1]["Cons"])
-
-    # BUNKER SEÇİM KORUMASI VE FİYAT EŞLEŞTİRME
-    secili_satirlar = st.session_state.bunker_df[st.session_state.bunker_df["Seç"] == True]
-    if secili_satirlar.empty:
-        aktif_fiyatlar = st.session_state.bunker_df.iloc[0]
-        st.warning("⚠️ Hiçbir yakıt limanı seçilmedi! Hesaplamada varsayılan olarak ilk liman fiyatları kullanılıyor.")
     else:
-        aktif_fiyatlar = secili_satirlar.iloc[0]
-        
-    # Her operasyon için özel seçilmiş yakıt tipini al
-    fuel_type_bal = str(st.session_state.sea_df.iloc[0]["Select"])
-    fuel_type_ldn = str(st.session_state.sea_df.iloc[1]["Select"])
-    fuel_type_port_work = str(st.session_state.port_df.iloc[1]["Select"])
-    
-    # Her yakıt tipi için ilgili limandaki fiyatı çek
-    price_bal = float(aktif_fiyatlar.get(fuel_type_bal, 0.0))
-    price_ldn = float(aktif_fiyatlar.get(fuel_type_ldn, 0.0))
-    price_port_work = float(aktif_fiyatlar.get(fuel_type_port_work, 0.0))
+        cons_bal = float(st.session_state.sea_df.iloc[0]["Cons"])
+        cons_ldn = float(st.session_state.sea_df.iloc[1]["Cons"])
+        cons_port_work = float(st.session_state.port_df.iloc[1]["Cons"])
 
-    # --- 1. SEYİR (AT SEA) HESAPLAMALARI ---
-    sea_legs = []
-    total_sea_days = 0.0
-    total_sea_cost = 0.0
-    
-    port_names = []
-    for i, r in st.session_state.port_rotation_df.iterrows():
-        name = str(r.get("Port Name", "")).strip()
-        if not name: name = f"Port {i+1}"
-        port_names.append(name)
-
-    prev_port = "Origin"
-    for idx, row in st.session_state.port_rotation_df.iterrows():
-        port_name = port_names[idx]
-        dist = float(row.get("Distance", 0.0))
-        margin = float(row.get("Weather Margin (%)", 5.0)) / 100.0
-        port_type = str(row.get("Port Type", ""))
-        
-        # Dinamik Fiyatlandırma Kullanılıyor
-        if port_type in ["Ballast Port", "Load Port", "Return Ballast"]:
-            days = (dist / (spd_bal * 24)) * (1 + margin)
-            fuel_mts = days * cons_bal
-            cost = fuel_mts * price_bal
+        # BUNKER SEÇİM KORUMASI VE FİYAT EŞLEŞTİRME
+        secili_satirlar = st.session_state.bunker_df[st.session_state.bunker_df["Seç"] == True]
+        if secili_satirlar.empty:
+            aktif_fiyatlar = st.session_state.bunker_df.iloc[0]
+            st.warning("⚠️ Hiçbir yakıt limanı seçilmedi! Hesaplamada varsayılan olarak ilk liman fiyatları kullanılıyor.")
         else:
-            days = (dist / (spd_ldn * 24)) * (1 + margin)
-            fuel_mts = days * cons_ldn
-            cost = fuel_mts * price_ldn
+            aktif_fiyatlar = secili_satirlar.iloc[0]
             
-        if idx == 0 and dist == 0:
+        fuel_type_bal = str(st.session_state.sea_df.iloc[0]["Select"])
+        fuel_type_ldn = str(st.session_state.sea_df.iloc[1]["Select"])
+        fuel_type_port_work = str(st.session_state.port_df.iloc[1]["Select"])
+        
+        # Fiyatları çekerken listede yoksa sıfır alınıp uyarılır (Sessiz Hata Koruması)
+        price_bal = float(aktif_fiyatlar.get(fuel_type_bal, 0.0))
+        if fuel_type_bal not in aktif_fiyatlar.index:
+            st.warning(f"'{fuel_type_bal}' fiyat listesinde bulunamadı, maliyet $0 olarak hesaplanıyor.")
+            
+        price_ldn = float(aktif_fiyatlar.get(fuel_type_ldn, 0.0))
+        if fuel_type_ldn not in aktif_fiyatlar.index:
+            st.warning(f"'{fuel_type_ldn}' fiyat listesinde bulunamadı, maliyet $0 olarak hesaplanıyor.")
+            
+        price_port_work = float(aktif_fiyatlar.get(fuel_type_port_work, 0.0))
+        if fuel_type_port_work not in aktif_fiyatlar.index:
+            st.warning(f"'{fuel_type_port_work}' fiyat listesinde bulunamadı, maliyet $0 olarak hesaplanıyor.")
+
+        # --- 1. SEYİR (AT SEA) HESAPLAMALARI ---
+        sea_legs = []
+        total_sea_days = 0.0
+        total_sea_cost = 0.0
+        
+        port_names = []
+        for i, r in st.session_state.port_rotation_df.iterrows():
+            name = str(r.get("Port Name", "")).strip()
+            if not name: name = f"Port {i+1}"
+            port_names.append(name)
+
+        prev_port = "Origin"
+        for idx, row in st.session_state.port_rotation_df.iterrows():
+            port_name = port_names[idx]
+            dist = float(row.get("Distance", 0.0))
+            margin = float(row.get("Weather Margin (%)", 5.0)) / 100.0
+            port_type = str(row.get("Port Type", ""))
+            
+            if port_type in ["Ballast Port", "Load Port", "Return Ballast"]:
+                days = (dist / (spd_bal * 24)) * (1 + margin)
+                fuel_mts = days * cons_bal
+                cost = fuel_mts * price_bal
+            else:
+                days = (dist / (spd_ldn * 24)) * (1 + margin)
+                fuel_mts = days * cons_ldn
+                cost = fuel_mts * price_ldn
+                
+            if idx == 0 and dist == 0:
+                prev_port = port_name
+                continue
+                
+            total_sea_days += days
+            total_sea_cost += cost
+            
+            leg_name = f"{prev_port} - {port_name}" if idx > 0 else f"Ballast -> {port_name}"
+            sea_legs.append({"At Sea": leg_name, "Duration (days)": days, "Bunker Cons. (USD)": cost})
             prev_port = port_name
-            continue
+
+        # --- 2. LİMAN (AT PORT) HESAPLAMALARI ---
+        port_ops = []
+        total_port_days = 0.0
+        total_port_cost = 0.0
+        
+        for idx, row in st.session_state.ld_details_df.iterrows():
+            p_name = str(row.get("Port Name", "")).strip()
+            if not p_name: p_name = f"Port {idx+1}"
             
-        total_sea_days += days
-        total_sea_cost += cost
-        
-        leg_name = f"{prev_port} - {port_name}" if idx > 0 else f"Ballast -> {port_name}"
-        sea_legs.append({"At Sea": leg_name, "Duration (days)": days, "Bunker Cons. (USD)": cost})
-        prev_port = port_name
-
-    # --- 2. LİMAN (AT PORT) HESAPLAMALARI ---
-    port_ops = []
-    total_port_days = 0.0
-    total_port_cost = 0.0
-    
-    for idx, row in st.session_state.ld_details_df.iterrows():
-        p_name = str(row.get("Port Name", "")).strip()
-        if not p_name: p_name = f"Port {idx+1}"
-        
-        rate = float(row.get("Rate", 0.0))
-        ex_days = float(row.get("Extra Days", 0.0))
-        unit = str(row.get("Unit", ""))
-        
-        if unit == "mts/day" and rate > 0:
-            p_days = (q / rate) + ex_days
-        else:
-            p_days = rate + ex_days
+            rate = float(row.get("Rate", 0.0))
+            ex_days = float(row.get("Extra Days", 0.0))
+            unit = str(row.get("Unit", ""))
             
-        fuel_mts = p_days * cons_port_work
-        cost = fuel_mts * price_port_work # Dinamik liman yakıt fiyatı
-        
-        port_ops.append({"At Port": p_name, "Duration (days)": p_days, "Bunker Cons. (USD)": cost})
-        total_port_days += p_days
-        total_port_cost += cost
+            if unit == "mts/day" and rate > 0:
+                p_days = (q / rate) + ex_days
+            else:
+                p_days = rate + ex_days
+                
+            fuel_mts = p_days * cons_port_work
+            cost = fuel_mts * price_port_work 
+            
+            port_ops.append({"At Port": p_name, "Duration (days)": p_days, "Bunker Cons. (USD)": cost})
+            total_port_days += p_days
+            total_port_cost += cost
 
-    total_days = total_sea_days + total_port_days
-    total_bunker_cost = total_sea_cost + total_port_cost
+        total_days = total_sea_days + total_port_days
+        total_bunker_cost = total_sea_cost + total_port_cost
 
-    # --- 3. DİĞER HESAPLAMALAR ---
-    gross_freight = f_rate * q if freight_term == "pmt" else f_rate
-    total_revenue = gross_freight 
+        # --- 3. DİĞER HESAPLAMALAR ---
+        gross_freight = f_rate * q if freight_term == "pmt" else f_rate
+        total_revenue = gross_freight 
 
-    commissions = gross_freight * ((add_comm + broker_comm) / 100.0)
-    total_pda = st.session_state.port_charges_df["PDA"].sum()
-    total_liner = st.session_state.port_charges_df["Liner Expenses"].sum()
+        commissions = gross_freight * ((add_comm + broker_comm) / 100.0)
+        total_pda = st.session_state.port_charges_df["PDA"].sum()
+        total_liner = st.session_state.port_charges_df["Liner Expenses"].sum()
 
-    total_opex = (total_bunker_cost + total_pda + total_liner + 
-                  despatch + strait_canal + extra_insurance + 
-                  cargo_survey + other_exp + commissions + freight_tax)
+        total_opex = (total_bunker_cost + total_pda + total_liner + 
+                      despatch + strait_canal + extra_insurance + 
+                      cargo_survey + other_exp + commissions + freight_tax)
 
-    op_profit = total_revenue - total_opex
-    tce = op_profit / total_days if total_days > 0 else 0.0
+        op_profit = total_revenue - total_opex
+        tce = op_profit / total_days if total_days > 0 else 0.0
 
-    st.session_state.base_f = f_rate
-    st.session_state.base_q = q
-    st.session_state.base_d = total_days
-    comm_pct = (add_comm + broker_comm) / 100.0
-    st.session_state.comm_multiplier = comm_pct
-    st.session_state.base_fixed_opex = total_opex - commissions
-    st.session_state.demurrage_val = 0.0 
-    st.session_state.tce_val = tce
-    st.session_state.calc_done = True
+        st.session_state.base_f = f_rate
+        st.session_state.base_q = q
+        st.session_state.base_d = total_days
+        comm_pct = (add_comm + broker_comm) / 100.0
+        st.session_state.comm_multiplier = comm_pct
+        st.session_state.base_fixed_opex = total_opex - commissions
+        st.session_state.demurrage_val = 0.0 
+        st.session_state.tce_val = tce
+        st.session_state.calc_done = True
 
-    st.session_state.sea_legs_data = sea_legs
-    st.session_state.port_ops_data = port_ops
-    st.session_state.res_summary = {
-        "total_days": total_days, "sea_days": total_sea_days, "port_days": total_port_days,
-        "sea_cost": total_sea_cost, "port_cost": total_port_cost
-    }
-    st.session_state.res_revenue = total_revenue
-    st.session_state.res_opex = total_opex
-    st.session_state.res_profit = op_profit
-    st.session_state.res_tce = tce
-    st.session_state.res_bunker_cost = total_bunker_cost
-    st.session_state.res_opex_details = [
-        total_bunker_cost, total_pda, freight_tax, total_liner, 0.0, 
-        despatch, strait_canal, extra_insurance, cargo_survey, other_exp, 
-        gross_freight * (add_comm/100), gross_freight * (broker_comm/100), total_opex
-    ]
-    st.toast("Sefer hesaplaması başarıyla tamamlandı!", icon="📈")
+        st.session_state.sea_legs_data = sea_legs
+        st.session_state.port_ops_data = port_ops
+        st.session_state.res_summary = {
+            "total_days": total_days, "sea_days": total_sea_days, "port_days": total_port_days,
+            "sea_cost": total_sea_cost, "port_cost": total_port_cost
+        }
+        st.session_state.res_revenue = total_revenue
+        st.session_state.res_opex = total_opex
+        st.session_state.res_profit = op_profit
+        st.session_state.res_tce = tce
+        st.session_state.res_bunker_cost = total_bunker_cost
+        st.session_state.res_opex_details = [
+            total_bunker_cost, total_pda, freight_tax, total_liner, 0.0, 
+            despatch, strait_canal, extra_insurance, cargo_survey, other_exp, 
+            gross_freight * (add_comm/100), gross_freight * (broker_comm/100), total_opex
+        ]
+        st.toast("Sefer hesaplaması başarıyla tamamlandı!", icon="📈")
 
 
 # =====================================================================
@@ -572,12 +577,13 @@ if hesapla_basildi:
 st.markdown('<p class="main-header">4 - Calculation & Strategy</p>', unsafe_allow_html=True)
 
 def render_html_table(df, right_cols):
-    html = '<table style="width:100%; border-collapse: collapse; font-size: 14px; margin-bottom: 20px; color: black;">'
-    html += '<thead><tr style="background-color: #f0f2f6; border-bottom: 2px solid #ddd;">'
+    html_out = '<table style="width:100%; border-collapse: collapse; font-size: 14px; margin-bottom: 20px; color: black;">'
+    html_out += '<thead><tr style="background-color: #f0f2f6; border-bottom: 2px solid #ddd;">'
     for col in df.columns:
         align = 'right' if col in right_cols else 'left'
-        html += f'<th style="text-align: {align}; padding: 8px;">{col}</th>'
-    html += '</tr></thead><tbody>'
+        # XSS Taraması (Tablo Başlıkları)
+        html_out += f'<th style="text-align: {align}; padding: 8px;">{html.escape(str(col))}</th>'
+    html_out += '</tr></thead><tbody>'
     
     for i, row in df.iterrows():
         first_col_val = str(row[df.columns[0]]).strip().upper()
@@ -585,13 +591,15 @@ def render_html_table(df, right_cols):
         fw = "bold" if is_total else "normal"
         bg = "#f9f9f9" if is_total else "transparent"
         
-        html += f'<tr style="border-bottom: 1px solid #eee; background-color: {bg}; font-weight: {fw};">'
+        html_out += f'<tr style="border-bottom: 1px solid #eee; background-color: {bg}; font-weight: {fw};">'
         for col in df.columns:
             align = 'right' if col in right_cols else 'left'
-            html += f'<td style="text-align: {align}; padding: 8px;">{row[col]}</td>'
-        html += '</tr>'
-    html += '</tbody></table>'
-    return html
+            # XSS Taraması (Tablo Hücreleri)
+            cell_val = html.escape(str(row[col]))
+            html_out += f'<td style="text-align: {align}; padding: 8px;">{cell_val}</td>'
+        html_out += '</tr>'
+    html_out += '</tbody></table>'
+    return html_out
 
 calc_col1, calc_col2, calc_col3 = st.columns([2.5, 1.2, 1.2])
 
@@ -687,15 +695,15 @@ if st.session_state.get("calc_done", False):
         f_vals = [f_base + (i - 5) * f_step for i in range(11)]
         v_vals = [var_base + (i - 4) * var_step for i in range(9)]
         
-        html = '<table style="width:100%; border-collapse: collapse; font-size: 13px; text-align: center; border: 1px solid #ccc; background-color: white; color: black;">'
-        html += '<tr><th style="border: 1px solid #ccc; background-color: #f0f2f6; padding: 4px;"></th>'
+        html_out = '<table style="width:100%; border-collapse: collapse; font-size: 13px; text-align: center; border: 1px solid #ccc; background-color: white; color: black;">'
+        html_out += '<tr><th style="border: 1px solid #ccc; background-color: #f0f2f6; padding: 4px;"></th>'
         for v in v_vals:
-            html += f'<th style="border: 1px solid #ccc; background-color: #f0f2f6; padding: 4px;">{format_tr(v, is_int=(matrix_type=="tonnage"))}</th>'
-        html += '</tr>'
+            html_out += f'<th style="border: 1px solid #ccc; background-color: #f0f2f6; padding: 4px;">{format_tr(v, is_int=(matrix_type=="tonnage"))}</th>'
+        html_out += '</tr>'
         
         for r_idx, f in enumerate(f_vals):
             row_bg = "#d9e1f2" if r_idx == 5 else "transparent"
-            html += f'<tr><td style="border: 1px solid #ccc; background-color: #f0f2f6; font-weight: bold; padding: 4px;">{format_tr(f)}</td>'
+            html_out += f'<tr><td style="border: 1px solid #ccc; background-color: #f0f2f6; font-weight: bold; padding: 4px;">{format_tr(f)}</td>'
             for c_idx, v in enumerate(v_vals):
                 cell_bg = row_bg
                 if c_idx == 4:
@@ -707,10 +715,10 @@ if st.session_state.get("calc_done", False):
                     val = get_matrix_ndp(f, st.session_state.base_q, v, rc)
                 
                 fw_cell = "bold" if (r_idx == 5 or c_idx == 4) else "normal"    
-                html += f'<td style="border: 1px solid #ccc; background-color: {cell_bg}; font-weight: {fw_cell}; padding: 4px;">{format_tr(val)}</td>'
-            html += '</tr>'
-        html += '</table>'
-        return html
+                html_out += f'<td style="border: 1px solid #ccc; background-color: {cell_bg}; font-weight: {fw_cell}; padding: 4px;">{format_tr(val)}</td>'
+            html_out += '</tr>'
+        html_out += '</table>'
+        return html_out
 
     daily_profit = st.session_state.tce_val
     rc = st.session_state.rc_input
