@@ -2,10 +2,10 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime, date
 from supabase import create_client, Client
-import html  # XSS Güvenliği için eklendi
+import html 
 
 # =====================================================================
-# SUPABASE BAĞLANTI AYARLARI (st.secrets ile Güvenli Hale Getirildi)
+# SUPABASE BAĞLANTI AYARLARI
 # =====================================================================
 SUPABASE_URL = st.secrets["SUPABASE_URL"]
 SUPABASE_KEY = st.secrets["SUPABASE_KEY"]
@@ -20,7 +20,7 @@ def init_connection():
 supabase = init_connection()
 
 # =====================================================================
-# SAYI FORMATLAMA FONKSİYONU (10.000,00 - Türkiye/Avrupa Formatı)
+# SAYI FORMATLAMA FONKSİYONU 
 # =====================================================================
 def format_tr(val, is_int=False):
     if pd.isna(val): return "0"
@@ -32,7 +32,6 @@ def format_tr(val, is_int=False):
 # Sayfa Yapılandırması
 st.set_page_config(page_title="Chartering Bridge", layout="wide")
 
-# CSS Ayarları
 st.markdown("""
     <style>
     .stNumberInput label { font-size: 13px !important; color: black !important; font-weight: bold !important; }
@@ -43,12 +42,11 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# EN ÜST ANA BAŞLIK
 st.markdown("<h1 style='text-align: center; font-weight: bold; font-size: 42px;'>VOYAGE CALCULATION</h1>", unsafe_allow_html=True)
 
 
 # =====================================================================
-# IMO OTOMATİK DOLDURMA FONKSİYONU VE STATE AYARLARI
+# VESSEL DATA VE VOYAGE LOAD (GERİ ÇAĞIRMA) FONKSİYONLARI
 # =====================================================================
 vessel_keys = {
     "v_imo": "", "v_name": "", "v_type": "", "v_flag": "", "v_class": "", "v_built": "",
@@ -66,35 +64,27 @@ def reset_vessel_data():
 
 def fetch_vessel_data():
     imo_val = str(st.session_state.v_imo).strip()
-    
     if not imo_val:
         reset_vessel_data()
         return
-        
     if supabase is None:
-        st.error("Supabase bağlantısı kurulamadı. Lütfen URL ve KEY bilgilerinizi kontrol edin.")
+        st.error("Supabase bağlantısı kurulamadı.")
         return
-
     try:
         if not imo_val.isdigit():
             reset_vessel_data()
             st.toast("IMO numarası sadece rakamlardan oluşmalıdır.", icon="⚠️")
             return
-
         imo_int = int(imo_val)
-
         response = supabase.table("vesseldatabase").select("*").eq("imo_number", imo_int).execute()
         data = response.data
-        
         if data and len(data) > 0:
             v = data[0]
-            
             st.session_state.v_name = str(v.get("name_of_ship", ""))
             st.session_state.v_type = str(v.get("type_of_ship", ""))
             st.session_state.v_flag = str(v.get("flag", ""))
             st.session_state.v_class = str(v.get("class", ""))
             st.session_state.v_built = str(v.get("year_of_build", ""))
-            
             st.session_state.v_dwt = float(v.get("dwt", 0.0) or 0.0)
             st.session_state.v_dwcc = float(v.get("dwcc", 0.0) or 0.0)
             st.session_state.v_grain = float(v.get("grain_cap_-cuft-", 0.0) or 0.0)
@@ -103,15 +93,78 @@ def fetch_vessel_data():
             st.session_state.v_nt = float(v.get("net_tonnage", 0.0) or 0.0)
             st.session_state.v_loa = float(v.get("loa", 0.0) or 0.0)
             st.session_state.v_beam = float(v.get("beam", 0.0) or 0.0)
-            
             st.toast(f"Gemi veritabanından çekildi: {st.session_state.v_name}", icon="✅")
         else:
             reset_vessel_data()
             st.toast("Veritabanında bu IMO numarasına ait gemi bulunamadı.", icon="⚠️")
-            
     except Exception as e:
         reset_vessel_data()
         st.error(f"Sorgu hatası: {e}")
+
+# Veritabanındaki eski seferleri getiren fonksiyon
+def get_saved_voyages():
+    if supabase:
+        try:
+            res = supabase.table("voyage_calculations").select("voyage_id").order("created_at", desc=True).execute()
+            return [r["voyage_id"] for r in res.data]
+        except:
+            return []
+    return []
+
+# Seçilen seferi hafızaya yükleyen fonksiyon
+def load_voyage_data(vid):
+    if not supabase: return
+    try:
+        res = supabase.table("voyage_calculations").select("*").eq("voyage_id", vid).execute()
+        if res.data and len(res.data) > 0:
+            row = res.data[0]
+            all_data = row.get("all_data", {})
+            
+            # Gemi Verilerini Yükle
+            vessel_data = all_data.get("vessel", {})
+            for k, v in vessel_data.items():
+                st.session_state[k] = v
+            
+            # Form Inputlarını Yükle
+            inputs = all_data.get("inputs", {})
+            if "voyage_date" in inputs:
+                try:
+                    st.session_state["voyage_date_input"] = datetime.strptime(inputs["voyage_date"], "%Y-%m-%d").date()
+                except: pass
+            if "laycan_date" in inputs:
+                try:
+                    st.session_state["laycan_date_input"] = datetime.strptime(inputs["laycan_date"], "%Y-%m-%d").date()
+                except: pass
+                
+            text_num_keys = ["currency_rate", "account", "cargo_item", "stowage_factor", "quantity", 
+                             "freight_term", "terms", "gear", "freight", "demurrage", "despatch", 
+                             "freight_tax", "extra_insurance", "cargo_survey", "strait_canal", 
+                             "add_comm", "broker_comm", "other_exp"]
+            for k in text_num_keys:
+                if k in inputs:
+                    st.session_state[f"{k}_input"] = inputs[k]
+                    
+            st.session_state["voyage_id_input"] = vid
+            
+            # Tablo (Dataframe) Verilerini Yükle
+            dfs = all_data.get("dataframes", {})
+            if "bunker_base" in dfs: st.session_state.bunker_base = pd.DataFrame(dfs["bunker_base"])
+            if "sea_base" in dfs: st.session_state.sea_base = pd.DataFrame(dfs["sea_base"])
+            if "port_base" in dfs: st.session_state.port_base = pd.DataFrame(dfs["port_base"])
+            if "port_rotation_base" in dfs: st.session_state.port_rotation_base = pd.DataFrame(dfs["port_rotation_base"])
+            if "port_charges_base" in dfs: st.session_state.port_charges_base = pd.DataFrame(dfs["port_charges_base"])
+            if "ld_details_base" in dfs: st.session_state.ld_details_base = pd.DataFrame(dfs["ld_details_base"])
+            
+            # Editör widget hafızalarını temizleyip tabloların yenilenmesini sağla
+            for key in ["bunker_editor_widget", "sea_editor_widget", "port_editor_widget", "rotation_editor_widget", "charges_editor_widget", "ld_editor_widget"]:
+                if key in st.session_state:
+                    del st.session_state[key]
+                    
+            st.session_state.calc_done = False
+            st.toast("Geçmiş sefer başarıyla yüklendi!", icon="✅")
+    except Exception as e:
+        st.error(f"Yükleme hatası: {e}")
+
 
 # =====================================================================
 # BÖLÜM 1: GENERAL INFORMATION
@@ -125,15 +178,27 @@ with col_left:
     
     v_id_col1, v_id_col2 = st.columns([1, 1.5])
     with v_id_col1: st.markdown("<div class='align-text'>Voyage ID No</div>", unsafe_allow_html=True)
-    with v_id_col2: voyage_id = st.text_input("", value="", label_visibility="collapsed")
+    with v_id_col2: voyage_id = st.text_input("", key="voyage_id_input", label_visibility="collapsed")
     
     date_col1, date_col2 = st.columns([1, 1.5])
     with date_col1: st.markdown("<div class='align-text'>Date</div>", unsafe_allow_html=True)
-    with date_col2: voyage_date = st.date_input("", value=datetime(2026, 7, 14), format="DD.MM.YYYY", label_visibility="collapsed")
+    with date_col2: voyage_date = st.date_input("", value=date.today(), key="voyage_date_input", format="DD.MM.YYYY", label_visibility="collapsed")
     
     curr_col1, curr_col2 = st.columns([1, 1.5])
     with curr_col1: st.markdown("<div class='align-text'>Currency Rate</div>", unsafe_allow_html=True)
-    with curr_col2: currency_rate = st.number_input("", value=0.0, format="%.3f", label_visibility="collapsed")
+    with curr_col2: currency_rate = st.number_input("", value=0.0, format="%.3f", key="currency_rate_input", label_visibility="collapsed")
+
+    # LOAD VOYAGE ALANI
+    st.write("---")
+    st.markdown("<div class='align-text' style='margin-bottom: 5px;'>Geçmiş Seferleri Yükle</div>", unsafe_allow_html=True)
+    saved_voyages = get_saved_voyages()
+    selected_voy = st.selectbox("Load Voyage", [""] + saved_voyages, label_visibility="collapsed")
+    if st.button("📂 Eski Seferi Getir", use_container_width=True):
+        if selected_voy:
+            load_voyage_data(selected_voy)
+            st.rerun()
+        else:
+            st.warning("Lütfen listeden bir sefer seçin.")
 
 with col_right:
     st.markdown("**Bunker Prices**")
@@ -258,29 +323,29 @@ st.markdown('<p class="main-header">3 - C/P Details</p>', unsafe_allow_html=True
 
 cp1, cp2, cp3, cp4, cp5 = st.columns(5)
 with cp1:
-    account = st.text_input("Account", "")
-    cargo_item = st.text_input("Cargo Item", "")
-    stowage_factor = st.number_input("Stowage Factor (cuft/ton)", value=0.0, format="%.2f")
-    quantity = st.number_input("Quantity", value=0.0, format="%.2f")
+    account = st.text_input("Account", key="account_input")
+    cargo_item = st.text_input("Cargo Item", key="cargo_item_input")
+    stowage_factor = st.number_input("Stowage Factor (cuft/ton)", value=0.0, format="%.2f", key="stowage_factor_input")
+    quantity = st.number_input("Quantity", value=0.0, format="%.2f", key="quantity_input")
 with cp2:
-    freight_term = st.selectbox("Freight Term", ["pmt", "lumpsum"])
-    terms = st.selectbox("Terms", ["FIO", "FIOS", "FIOST", "LIFO", "FILO", "LILO"], index=2)
-    gear = st.selectbox("Gear", ["Gearless", "Geared"])
-    laycan_date = st.date_input("Laycan", value=date.today(), format="DD.MM.YYYY")
+    freight_term = st.selectbox("Freight Term", ["pmt", "lumpsum"], key="freight_term_input")
+    terms = st.selectbox("Terms", ["FIO", "FIOS", "FIOST", "LIFO", "FILO", "LILO"], index=2, key="terms_input")
+    gear = st.selectbox("Gear", ["Gearless", "Geared"], key="gear_input")
+    laycan_date = st.date_input("Laycan", value=date.today(), format="DD.MM.YYYY", key="laycan_date_input")
     st.markdown(f"<span style='color:#c5a059; font-size:14px; font-weight:bold;'>{laycan_date.strftime('%d %B %Y, %A')}</span>", unsafe_allow_html=True)
 with cp3:
-    freight = st.number_input("Freight", value=0.0, format="%.2f")
-    demurrage = st.number_input("Demurrage", value=0.0, format="%.2f")
-    despatch = st.number_input("Despatch", value=0.0, format="%.2f")
-    freight_tax = st.number_input("Freight Tax", value=0.0, format="%.2f")
+    freight = st.number_input("Freight", value=0.0, format="%.2f", key="freight_input")
+    demurrage = st.number_input("Demurrage", value=0.0, format="%.2f", key="demurrage_input")
+    despatch = st.number_input("Despatch", value=0.0, format="%.2f", key="despatch_input")
+    freight_tax = st.number_input("Freight Tax", value=0.0, format="%.2f", key="freight_tax_input")
 with cp4:
-    extra_insurance = st.number_input("Extra Insurance", value=0.0, format="%.2f")
-    cargo_survey = st.number_input("Cargo Survey", value=0.0, format="%.2f")
-    strait_canal = st.number_input("Strait / Canal Passage Expenses", value=0.0, format="%.2f")
+    extra_insurance = st.number_input("Extra Insurance", value=0.0, format="%.2f", key="extra_insurance_input")
+    cargo_survey = st.number_input("Cargo Survey", value=0.0, format="%.2f", key="cargo_survey_input")
+    strait_canal = st.number_input("Strait / Canal Passage Expenses", value=0.0, format="%.2f", key="strait_canal_input")
 with cp5:
-    add_comm = st.number_input("Address Commission (%)", value=0.0, step=0.25, format="%.2f")
-    broker_comm = st.number_input("Brokerage Commission (%)", value=0.0, step=0.25, format="%.2f")
-    other_exp = st.number_input("Other", value=0.0, format="%.2f")
+    add_comm = st.number_input("Address Commission (%)", value=0.0, step=0.25, format="%.2f", key="add_comm_input")
+    broker_comm = st.number_input("Brokerage Commission (%)", value=0.0, step=0.25, format="%.2f", key="broker_comm_input")
+    other_exp = st.number_input("Other", value=0.0, format="%.2f", key="other_exp_input")
 
 st.write("")
 
@@ -428,7 +493,6 @@ if hesapla_basildi:
     spd_bal = float(st.session_state.sea_df.iloc[0]["Speed"]) 
     spd_ldn = float(st.session_state.sea_df.iloc[1]["Speed"]) 
     
-    # HIZ KORUMASI (SPEED 0 KONTROLÜ)
     if spd_bal <= 0 or spd_ldn <= 0:
         st.error("Lütfen geminin Speed (Hız) değerlerini 0'dan büyük giriniz!")
     else:
@@ -436,7 +500,6 @@ if hesapla_basildi:
         cons_ldn = float(st.session_state.sea_df.iloc[1]["Cons"])
         cons_port_work = float(st.session_state.port_df.iloc[1]["Cons"])
 
-        # BUNKER SEÇİM KORUMASI VE FİYAT EŞLEŞTİRME
         secili_satirlar = st.session_state.bunker_df[st.session_state.bunker_df["Seç"] == True]
         if secili_satirlar.empty:
             aktif_fiyatlar = st.session_state.bunker_df.iloc[0]
@@ -448,7 +511,6 @@ if hesapla_basildi:
         fuel_type_ldn = str(st.session_state.sea_df.iloc[1]["Select"])
         fuel_type_port_work = str(st.session_state.port_df.iloc[1]["Select"])
         
-        # Fiyatları çekerken listede yoksa sıfır alınıp uyarılır (Sessiz Hata Koruması)
         price_bal = float(aktif_fiyatlar.get(fuel_type_bal, 0.0))
         if fuel_type_bal not in aktif_fiyatlar.index:
             st.warning(f"'{fuel_type_bal}' fiyat listesinde bulunamadı, maliyet $0 olarak hesaplanıyor.")
@@ -568,6 +630,85 @@ if hesapla_basildi:
             despatch, strait_canal, extra_insurance, cargo_survey, other_exp, 
             gross_freight * (add_comm/100), gross_freight * (broker_comm/100), total_opex
         ]
+        
+        # =====================================================================
+        # SUPABASE UPSERT (KAYDETME) İŞLEMİ
+        # =====================================================================
+        # 1. Voyage ID Kontrolü ve Üretimi
+        vid = st.session_state.get("voyage_id_input", "").strip()
+        vname = st.session_state.get("v_name", "").strip()
+        if not vname: vname = "UNNAMED_VESSEL"
+        
+        if not vid:
+            # ID yoksa GEMI_ADI-YYMMDD-HHMMSS formatında üret
+            vid = f"{vname.upper().replace(' ', '_')}-{datetime.now().strftime('%y%m%d-%H%M%S')}"
+            st.session_state["voyage_id_input"] = vid # Üretilen ID'yi hafızaya al
+            
+        # 2. Port Rotation'dan Load ve Discharge limanlarını yakalama
+        load_port_val = ""
+        discharge_port_val = ""
+        for _, r in st.session_state.port_rotation_df.iterrows():
+            if r["Port Type"] == "Load Port" and not load_port_val:
+                load_port_val = str(r["Port Name"])
+            if r["Port Type"] == "Discharge Port" and not discharge_port_val:
+                discharge_port_val = str(r["Port Name"])
+                
+        # 3. JSONB Paketini (all_data) Hazırlama
+        all_data_payload = {
+            "vessel": {k: st.session_state.get(k) for k in vessel_keys.keys()},
+            "inputs": {
+                "voyage_date": str(st.session_state.get("voyage_date_input", date.today())),
+                "currency_rate": st.session_state.get("currency_rate_input", 0.0),
+                "account": st.session_state.get("account_input", ""),
+                "cargo_item": st.session_state.get("cargo_item_input", ""),
+                "stowage_factor": st.session_state.get("stowage_factor_input", 0.0),
+                "quantity": st.session_state.get("quantity_input", 0.0),
+                "freight_term": st.session_state.get("freight_term_input", "pmt"),
+                "terms": st.session_state.get("terms_input", "FIOST"),
+                "gear": st.session_state.get("gear_input", "Gearless"),
+                "laycan_date": str(st.session_state.get("laycan_date_input", date.today())),
+                "freight": st.session_state.get("freight_input", 0.0),
+                "demurrage": st.session_state.get("demurrage_input", 0.0),
+                "despatch": st.session_state.get("despatch_input", 0.0),
+                "freight_tax": st.session_state.get("freight_tax_input", 0.0),
+                "extra_insurance": st.session_state.get("extra_insurance_input", 0.0),
+                "cargo_survey": st.session_state.get("cargo_survey_input", 0.0),
+                "strait_canal": st.session_state.get("strait_canal_input", 0.0),
+                "add_comm": st.session_state.get("add_comm_input", 0.0),
+                "broker_comm": st.session_state.get("broker_comm_input", 0.0),
+                "other_exp": st.session_state.get("other_exp_input", 0.0)
+            },
+            "dataframes": {
+                "bunker_base": st.session_state.bunker_df.to_dict('records') if 'bunker_df' in st.session_state else [],
+                "sea_base": st.session_state.sea_df.to_dict('records') if 'sea_df' in st.session_state else [],
+                "port_base": st.session_state.port_df.to_dict('records') if 'port_df' in st.session_state else [],
+                "port_rotation_base": st.session_state.port_rotation_df.to_dict('records') if 'port_rotation_df' in st.session_state else [],
+                "port_charges_base": st.session_state.port_charges_df.to_dict('records') if 'port_charges_df' in st.session_state else [],
+                "ld_details_base": st.session_state.ld_details_df.to_dict('records') if 'ld_details_df' in st.session_state else []
+            }
+        }
+        
+        # 4. Veritabanına Gönderilecek Tablo Satırı
+        db_payload = {
+            "voyage_id": vid,
+            "vessel_name": vname,
+            "load_port": load_port_val,
+            "discharge_port": discharge_port_val,
+            "cargo_item": st.session_state.get("cargo_item_input", ""),
+            "account": st.session_state.get("account_input", ""),
+            "date": str(st.session_state.get("voyage_date_input", date.today())),
+            "quantity": st.session_state.get("quantity_input", 0.0),
+            "all_data": all_data_payload
+        }
+        
+        # 5. Kaydet (Upsert)
+        if supabase:
+            try:
+                supabase.table("voyage_calculations").upsert(db_payload).execute()
+                st.toast(f"Sefer veritabanına kaydedildi: {vid}", icon="💾")
+            except Exception as e:
+                st.error(f"Veritabanı kayıt hatası: {e}")
+                
         st.toast("Sefer hesaplaması başarıyla tamamlandı!", icon="📈")
 
 
@@ -581,7 +722,6 @@ def render_html_table(df, right_cols):
     html_out += '<thead><tr style="background-color: #f0f2f6; border-bottom: 2px solid #ddd;">'
     for col in df.columns:
         align = 'right' if col in right_cols else 'left'
-        # XSS Taraması (Tablo Başlıkları)
         html_out += f'<th style="text-align: {align}; padding: 8px;">{html.escape(str(col))}</th>'
     html_out += '</tr></thead><tbody>'
     
@@ -594,7 +734,6 @@ def render_html_table(df, right_cols):
         html_out += f'<tr style="border-bottom: 1px solid #eee; background-color: {bg}; font-weight: {fw};">'
         for col in df.columns:
             align = 'right' if col in right_cols else 'left'
-            # XSS Taraması (Tablo Hücreleri)
             cell_val = html.escape(str(row[col]))
             html_out += f'<td style="text-align: {align}; padding: 8px;">{cell_val}</td>'
         html_out += '</tr>'
