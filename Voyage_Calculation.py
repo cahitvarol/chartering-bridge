@@ -640,9 +640,13 @@ if hesapla_basildi:
         if not vname: vname = "UNNAMED_VESSEL"
         
         if not vid:
-            # ID yoksa GEMI_ADI-YYMMDD-HHMMSS formatında üret
-            vid = f"{vname.upper().replace(' ', '_')}-{datetime.now().strftime('%y%m%d-%H%M%S')}"
-            st.session_state["voyage_id_input"] = vid # Üretilen ID'yi hafızaya al
+            # Eğer bu pencerede daha önce otomatik bir ID üretildiyse onu kullan (Mükerrer kaydı önler)
+            if "auto_generated_vid" in st.session_state and st.session_state.auto_generated_vid:
+                vid = st.session_state.auto_generated_vid
+            else:
+                # İlk kez hesaplanıyorsa yeni üret ve widget'a değil, arka plan hafızasına yaz
+                vid = f"{vname.upper().replace(' ', '_')}-{datetime.now().strftime('%y%m%d-%H%M%S')}"
+                st.session_state.auto_generated_vid = vid
             
         # 2. Port Rotation'dan Load ve Discharge limanlarını yakalama
         load_port_val = ""
