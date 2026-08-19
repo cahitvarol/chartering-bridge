@@ -91,12 +91,72 @@ if "save_conflict_id" not in st.session_state:
     st.session_state.save_conflict_id = None
 if "pending_voyage_id_update" not in st.session_state:
     st.session_state.pending_voyage_id_update = None
+if "pending_voyage_load" not in st.session_state:
+    st.session_state.pending_voyage_load = None
 
 # DÜZELTME: voyage_id_input widget'ı henüz oluşturulmadan ÖNCE, bekleyen bir
 # ID güncellemesi varsa burada uygulanır (widget key'i render sonrası değiştirilemez).
 if st.session_state.pending_voyage_id_update:
     st.session_state.voyage_id_input = st.session_state.pending_voyage_id_update
     st.session_state.pending_voyage_id_update = None
+
+def apply_voyage_load(row):
+    """
+    Supabase'ten çekilen tam sefer kaydını session_state'e uygular.
+    KRİTİK: Bu fonksiyon HİÇBİR widget oluşturulmadan ÖNCE, script'in en
+    başında çağrılmalıdır. Aksi halde 'voyage_date_input', 'currency_rate_input'
+    gibi Section 1 widget'ları bu satırdan önce zaten render edilmiş olur ve
+    Streamlit "widget instantiated after session_state set" hatası fırlatır
+    (bu da yüklemenin yarıda kesilip sadece gemi bilgilerinin gelmesine yol açar).
+    """
+    all_data = row.get("all_data", {})
+
+    vessel_data = all_data.get("vessel", {})
+    for k, v in vessel_data.items():
+        st.session_state[k] = v
+
+    inputs = all_data.get("inputs", {})
+    if "voyage_date" in inputs:
+        try:
+            st.session_state["voyage_date_input"] = datetime.strptime(inputs["voyage_date"], "%Y-%m-%d").date()
+        except Exception:
+            pass
+    if "laycan_date" in inputs:
+        try:
+            st.session_state["laycan_date_input"] = datetime.strptime(inputs["laycan_date"], "%Y-%m-%d").date()
+        except Exception:
+            pass
+
+    text_num_keys = ["currency_rate", "account", "cargo_item", "stowage_factor", "quantity",
+                     "freight_term", "terms", "gear", "freight", "demurrage", "despatch",
+                     "freight_tax", "extra_insurance", "cargo_survey", "strait_canal",
+                     "add_comm", "broker_comm", "other_exp"]
+    for k in text_num_keys:
+        if k in inputs:
+            st.session_state[f"{k}_input"] = inputs[k]
+
+    st.session_state["voyage_id_input"] = row.get("voyage_id", "")
+
+    dfs = all_data.get("dataframes", {})
+    if "bunker_base" in dfs: st.session_state.bunker_base = pd.DataFrame(dfs["bunker_base"])
+    if "sea_base" in dfs: st.session_state.sea_base = pd.DataFrame(dfs["sea_base"])
+    if "port_base" in dfs: st.session_state.port_base = pd.DataFrame(dfs["port_base"])
+    if "port_rotation_base" in dfs: st.session_state.port_rotation_base = pd.DataFrame(dfs["port_rotation_base"])
+    if "port_charges_base" in dfs: st.session_state.port_charges_base = pd.DataFrame(dfs["port_charges_base"])
+    if "ld_details_base" in dfs: st.session_state.ld_details_base = pd.DataFrame(dfs["ld_details_base"])
+
+    for key in ["bunker_editor_widget", "sea_editor_widget", "port_editor_widget", "rotation_editor_widget", "charges_editor_widget", "ld_editor_widget"]:
+        if key in st.session_state:
+            del st.session_state[key]
+
+    st.session_state.calc_done = False
+
+# DÜZELTME: Bekleyen bir sefer yükleme isteği varsa, script'in en başında,
+# hiçbir widget oluşturulmadan önce uygulanır.
+if st.session_state.pending_voyage_load:
+    apply_voyage_load(st.session_state.pending_voyage_load)
+    st.session_state.pending_voyage_load = None
+    st.toast("Geçmiş sefer başarıyla yüklendi!", icon="✅")
 
 def reset_vessel_data():
     for key in vessel_keys.keys():
@@ -166,55 +226,18 @@ def voyage_id_exists(vid):
         return False
 
 def load_voyage_data(vid):
+    """
+    Seçilen seferi Supabase'ten çeker ve 'pending_voyage_load' içine koyarak
+    rerun tetikler. Gerçek session_state ataması apply_voyage_load() ile,
+    script'in en başında (hiçbir widget oluşturulmadan önce) yapılır.
+    """
     if not supabase: return
     try:
         res = supabase.table("voyage_calculations").select("*").eq("voyage_id", vid).execute()
         if res.data and len(res.data) > 0:
-            row = res.data[0]
-            all_data = row.get("all_data", {})
-
-            vessel_data = all_data.get("vessel", {})
-            for k, v in vessel_data.items():
-                st.session_state[k] = v
-
-            inputs = all_data.get("inputs", {})
-            if "voyage_date" in inputs:
-                try:
-                    st.session_state["voyage_date_input"] = datetime.strptime(inputs["voyage_date"], "%Y-%m-%d").date()
-                except Exception:
-                    pass
-            if "laycan_date" in inputs:
-                try:
-                    st.session_state["laycan_date_input"] = datetime.strptime(inputs["laycan_date"], "%Y-%m-%d").date()
-                except Exception:
-                    pass
-
-            text_num_keys = ["currency_rate", "account", "cargo_item", "stowage_factor", "quantity",
-                             "freight_term", "terms", "gear", "freight", "demurrage", "despatch",
-                             "freight_tax", "extra_insurance", "cargo_survey", "strait_canal",
-                             "add_comm", "broker_comm", "other_exp"]
-            for k in text_num_keys:
-                if k in inputs:
-                    st.session_state[f"{k}_input"] = inputs[k]
-
-            # DÜZELTME: Doğrudan atama yerine "pending" mekanizması kullanılıyor,
-            # çünkü voyage_id_input widget'ı bu script çalışmasında zaten oluşturulmuş olabilir.
-            st.session_state.pending_voyage_id_update = vid
-
-            dfs = all_data.get("dataframes", {})
-            if "bunker_base" in dfs: st.session_state.bunker_base = pd.DataFrame(dfs["bunker_base"])
-            if "sea_base" in dfs: st.session_state.sea_base = pd.DataFrame(dfs["sea_base"])
-            if "port_base" in dfs: st.session_state.port_base = pd.DataFrame(dfs["port_base"])
-            if "port_rotation_base" in dfs: st.session_state.port_rotation_base = pd.DataFrame(dfs["port_rotation_base"])
-            if "port_charges_base" in dfs: st.session_state.port_charges_base = pd.DataFrame(dfs["port_charges_base"])
-            if "ld_details_base" in dfs: st.session_state.ld_details_base = pd.DataFrame(dfs["ld_details_base"])
-
-            for key in ["bunker_editor_widget", "sea_editor_widget", "port_editor_widget", "rotation_editor_widget", "charges_editor_widget", "ld_editor_widget"]:
-                if key in st.session_state:
-                    del st.session_state[key]
-
-            st.session_state.calc_done = False
-            st.toast("Geçmiş sefer başarıyla yüklendi!", icon="✅")
+            st.session_state.pending_voyage_load = res.data[0]
+        else:
+            st.warning("Seçilen sefer bulunamadı.")
     except Exception as e:
         st.error(f"Yükleme hatası: {e}")
 
