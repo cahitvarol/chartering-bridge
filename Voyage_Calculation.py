@@ -100,6 +100,30 @@ if st.session_state.pending_voyage_id_update:
     st.session_state.voyage_id_input = st.session_state.pending_voyage_id_update
     st.session_state.pending_voyage_id_update = None
 
+# DÜZELTME: Supabase'te 'all_data' JSONB tipinde saklanıyor ve PostgreSQL JSONB
+# obje anahtarlarının GİRİŞ SIRASINI KORUMAZ (dahili olarak uzunluk+alfabetik
+# sıraya göre saklar). Bu yüzden yükleme sonrası tabloların kolon sırası
+# karışabiliyor (ör. "Port Type" 1. kolondan 3. kolona kayabiliyor).
+# Çözüm: Her tablo için sabit kolon sırasını burada tanımlayıp, DataFrame'i
+# yükledikten sonra bu sıraya göre yeniden hizalıyoruz.
+TABLE_COLUMN_ORDER = {
+    "bunker_base": ["Seç", "Liman", "MGO %0,1", "ULSFO %0,1", "VLSFO %0,5", "IFO380 %3,5"],
+    "sea_base": ["At Sea", "Speed", "Cons", "Select"],
+    "port_base": ["At Port", "Cons", "Select"],
+    "port_rotation_base": ["Port Type", "Port Name", "Distance", "Weather Margin (%)"],
+    "port_charges_base": ["Port Type", "Port Name", "PDA", "Liner Expenses"],
+    "ld_details_base": ["Port Type", "Port Name", "Rate", "Unit", "L/D Terms", "Extra Days"],
+}
+
+def reorder_columns(df, table_key):
+    """Sabit kolon sırasını uygular; listede olmayan (beklenmedik) kolonlar sona eklenir."""
+    columns = TABLE_COLUMN_ORDER.get(table_key)
+    if not columns:
+        return df
+    existing = [c for c in columns if c in df.columns]
+    extra = [c for c in df.columns if c not in columns]
+    return df[existing + extra]
+
 def apply_voyage_load(row):
     """
     Supabase'ten çekilen tam sefer kaydını session_state'e uygular.
@@ -138,18 +162,45 @@ def apply_voyage_load(row):
     st.session_state["voyage_id_input"] = row.get("voyage_id", "")
 
     dfs = all_data.get("dataframes", {})
-    if "bunker_base" in dfs: st.session_state.bunker_base = pd.DataFrame(dfs["bunker_base"])
-    if "sea_base" in dfs: st.session_state.sea_base = pd.DataFrame(dfs["sea_base"])
-    if "port_base" in dfs: st.session_state.port_base = pd.DataFrame(dfs["port_base"])
-    if "port_rotation_base" in dfs: st.session_state.port_rotation_base = pd.DataFrame(dfs["port_rotation_base"])
-    if "port_charges_base" in dfs: st.session_state.port_charges_base = pd.DataFrame(dfs["port_charges_base"])
-    if "ld_details_base" in dfs: st.session_state.ld_details_base = pd.DataFrame(dfs["ld_details_base"])
+    if "bunker_base" in dfs: st.session_state.bunker_base = reorder_columns(pd.DataFrame(dfs["bunker_base"]), "bunker_base")
+    if "sea_base" in dfs: st.session_state.sea_base = reorder_columns(pd.DataFrame(dfs["sea_base"]), "sea_base")
+    if "port_base" in dfs: st.session_state.port_base = reorder_columns(pd.DataFrame(dfs["port_base"]), "port_base")
+    if "port_rotation_base" in dfs: st.session_state.port_rotation_base = reorder_columns(pd.DataFrame(dfs["port_rotation_base"]), "port_rotation_base")
+    if "port_charges_base" in dfs: st.session_state.port_charges_base = reorder_columns(pd.DataFrame(dfs["port_charges_base"]), "port_charges_base")
+    if "ld_details_base" in dfs: st.session_state.ld_details_base = reorder_columns(pd.DataFrame(dfs["ld_details_base"]), "ld_details_base")
 
     for key in ["bunker_editor_widget", "sea_editor_widget", "port_editor_widget", "rotation_editor_widget", "charges_editor_widget", "ld_editor_widget"]:
         if key in st.session_state:
             del st.session_state[key]
 
-    st.session_state.calc_done = False
+    # DÜZELTME: Hesaplama sonuçları (Bölüm 4 ve 5) artık kaydediliyor ve geri yükleniyor.
+    results = all_data.get("results", {})
+    if results:
+        st.session_state.res_summary = results.get("res_summary", {"total_days": 0.0, "sea_days": 0.0, "port_days": 0.0, "sea_cost": 0.0, "port_cost": 0.0})
+        st.session_state.sea_legs_data = results.get("sea_legs_data", [])
+        st.session_state.port_ops_data = results.get("port_ops_data", [])
+        st.session_state.res_revenue = results.get("res_revenue", 0.0)
+        st.session_state.res_opex = results.get("res_opex", 0.0)
+        st.session_state.res_profit = results.get("res_profit", 0.0)
+        st.session_state.res_tce = results.get("res_tce", 0.0)
+        st.session_state.res_opex_details = results.get("res_opex_details", [])
+        st.session_state.base_f = results.get("base_f", 0.0)
+        st.session_state.base_q = results.get("base_q", 0.0)
+        st.session_state.base_d = results.get("base_d", 0.0)
+        st.session_state.comm_multiplier = results.get("comm_multiplier", 0.0)
+        st.session_state.base_fixed_opex = results.get("base_fixed_opex", 0.0)
+        st.session_state.demurrage_val = results.get("demurrage_val", 0.0)
+        st.session_state.tce_val = results.get("tce_val", 0.0)
+        st.session_state.rc_input = results.get("rc_input", 0.0)
+        st.session_state.fc_1 = results.get("fc_1", 0.5)
+        st.session_state.tc_1 = results.get("tc_1", 100.0)
+        st.session_state.fc_2 = results.get("fc_2", 0.5)
+        st.session_state.dc_2 = results.get("dc_2", 1.0)
+        st.session_state.calc_done = True
+    else:
+        # Eski (bu güncellemeden önce kaydedilmiş) seferlerde sonuç verisi yok.
+        st.session_state.calc_done = False
+
 
 # DÜZELTME: Bekleyen bir sefer yükleme isteği varsa, script'in en başında,
 # hiçbir widget oluşturulmadan önce uygulanır.
@@ -282,6 +333,32 @@ def build_voyage_payload(vid):
             "port_rotation_base": df_to_safe_dict(st.session_state.get('port_rotation_df')),
             "port_charges_base": df_to_safe_dict(st.session_state.get('port_charges_df')),
             "ld_details_base": df_to_safe_dict(st.session_state.get('ld_details_df'))
+        },
+        # DÜZELTME: Bölüm 4 (Calculation & Strategy) ve Bölüm 5 (Analysis & Strategy)
+        # sonuçları artık kaydediliyor, böylece sefer tekrar yüklendiğinde bu
+        # bölümler de geri gelir. Sadece calc_done=True iken (buton zaten bu
+        # koşulda aktif olduğu için) bu değerler anlamlıdır.
+        "results": {
+            "res_summary": st.session_state.get("res_summary", {}),
+            "sea_legs_data": st.session_state.get("sea_legs_data", []),
+            "port_ops_data": st.session_state.get("port_ops_data", []),
+            "res_revenue": st.session_state.get("res_revenue", 0.0),
+            "res_opex": st.session_state.get("res_opex", 0.0),
+            "res_profit": st.session_state.get("res_profit", 0.0),
+            "res_tce": st.session_state.get("res_tce", 0.0),
+            "res_opex_details": st.session_state.get("res_opex_details", []),
+            "base_f": st.session_state.get("base_f", 0.0),
+            "base_q": st.session_state.get("base_q", 0.0),
+            "base_d": st.session_state.get("base_d", 0.0),
+            "comm_multiplier": st.session_state.get("comm_multiplier", 0.0),
+            "base_fixed_opex": st.session_state.get("base_fixed_opex", 0.0),
+            "demurrage_val": st.session_state.get("demurrage_val", 0.0),
+            "tce_val": st.session_state.get("tce_val", 0.0),
+            "rc_input": st.session_state.get("rc_input", 0.0),
+            "fc_1": st.session_state.get("fc_1", 0.5),
+            "tc_1": st.session_state.get("tc_1", 100.0),
+            "fc_2": st.session_state.get("fc_2", 0.5),
+            "dc_2": st.session_state.get("dc_2", 1.0),
         }
     }
 
