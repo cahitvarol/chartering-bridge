@@ -296,11 +296,7 @@ def build_voyage_payload(vid):
     """Mevcut session_state'ten Supabase'e yazılacak payload'ı üretir."""
     vname = st.session_state.get("v_name", "").strip() or "UNNAMED_VESSEL"
 
-    load_port_val = ""
-    discharge_port_val = ""
-    for _, r in st.session_state.port_rotation_df.iterrows():
-        if r["Port Type"] == "Load Port" and not load_port_val: load_port_val = str(r["Port Name"])
-        if r["Port Type"] == "Discharge Port" and not discharge_port_val: discharge_port_val = str(r["Port Name"])
+    load_port_val, discharge_port_val = get_load_discharge_ports()
 
     all_data_payload = {
         "vessel": {k: st.session_state.get(k) for k in vessel_keys.keys()},
@@ -393,9 +389,32 @@ def save_voyage_to_db(vid):
         st.error(f"Veritabanı kayıt hatası: {e}")
         return False
 
+def get_load_discharge_ports():
+    """Port Rotation tablosundan ilk Load Port ve Discharge Port isimlerini döndürür."""
+    load_port_val = ""
+    discharge_port_val = ""
+    df = st.session_state.get("port_rotation_df")
+    if df is not None:
+        for _, r in df.iterrows():
+            if r.get("Port Type") == "Load Port" and not load_port_val:
+                load_port_val = str(r.get("Port Name", "")).strip()
+            if r.get("Port Type") == "Discharge Port" and not discharge_port_val:
+                discharge_port_val = str(r.get("Port Name", "")).strip()
+    return load_port_val, discharge_port_val
+
 def generate_new_voyage_id():
+    """
+    Voyage ID formatı:
+    "Vessel Name - YYDDMM-hhmm-ss - Load Port - Discharge Port - Cargo Item - Account"
+    """
     vname = st.session_state.get("v_name", "").strip() or "UNNAMED_VESSEL"
-    return f"{vname.upper().replace(' ', '_')}-{datetime.now().strftime('%y%m%d-%H%M%S')}"
+    timestamp = datetime.now().strftime("%y%d%m-%H%M-%S")
+    load_port_val, discharge_port_val = get_load_discharge_ports()
+    load_port_val = load_port_val or "NOLOAD"
+    discharge_port_val = discharge_port_val or "NODISCH"
+    cargo_item_val = st.session_state.get("cargo_item_input", "").strip() or "NOCARGO"
+    account_val = st.session_state.get("account_input", "").strip() or "NOACC"
+    return f"{vname} - {timestamp} - {load_port_val} - {discharge_port_val} - {cargo_item_val} - {account_val}"
 
 # =====================================================================
 # BÖLÜM 1: GENERAL INFORMATION
