@@ -1,0 +1,91 @@
+"""
+dashboard.py
+Searchable dashboard over circulars.db.
+
+Run with:
+    pip install streamlit pandas
+    streamlit run dashboard.py
+"""
+
+import sqlite3
+
+import pandas as pd
+import streamlit as st
+
+DB_PATH = "circulars.db"
+
+st.set_page_config(page_title="Circular Desk", layout="wide")
+st.title("Cargo & Vessel Circular Desk")
+
+tab_cargo, tab_vessel, tab_other = st.tabs(["Cargo Circulars", "Vessel Circulars", "Other"])
+
+
+def load_table(table_name):
+    conn = sqlite3.connect(DB_PATH)
+    try:
+        df = pd.read_sql_query(f"SELECT * FROM {table_name} ORDER BY id DESC", conn)
+    except Exception:
+        df = pd.DataFrame()
+    conn.close()
+    return df
+
+
+with tab_cargo:
+    df = load_table("cargo_circulars")
+    if df.empty:
+        st.info("No cargo circulars yet.")
+    else:
+        col1, col2, col3 = st.columns(3)
+        load_port_filter = col1.text_input("Load port contains", key="lp")
+        disch_port_filter = col2.text_input("Discharge port contains", key="dp")
+        search = col3.text_input("Search all fields", key="cargo_search")
+
+        filtered = df.copy()
+        if load_port_filter:
+            filtered = filtered[filtered["load_port"].str.contains(load_port_filter, case=False, na=False)]
+        if disch_port_filter:
+            filtered = filtered[filtered["discharge_port"].str.contains(disch_port_filter, case=False, na=False)]
+        if search:
+            mask = filtered.apply(lambda row: row.astype(str).str.contains(search, case=False, na=False).any(), axis=1)
+            filtered = filtered[mask]
+
+        st.caption(f"{len(filtered)} of {len(df)} cargo circulars")
+        st.dataframe(
+            filtered[["received_date", "sender", "charterer", "cargo_nature", "quantity",
+                      "load_port", "discharge_port", "laycan_start", "laycan_end",
+                      "commission", "freight_idea", "vessel_type_required"]],
+            use_container_width=True,
+        )
+
+with tab_vessel:
+    df = load_table("vessel_circulars")
+    if df.empty:
+        st.info("No vessel circulars yet.")
+    else:
+        col1, col2, col3 = st.columns(3)
+        open_port_filter = col1.text_input("Open port contains", key="op")
+        vessel_name_filter = col2.text_input("Vessel name contains", key="vn")
+        search = col3.text_input("Search all fields", key="vessel_search")
+
+        filtered = df.copy()
+        if open_port_filter:
+            filtered = filtered[filtered["open_port"].str.contains(open_port_filter, case=False, na=False)]
+        if vessel_name_filter:
+            filtered = filtered[filtered["vessel_name"].str.contains(vessel_name_filter, case=False, na=False)]
+        if search:
+            mask = filtered.apply(lambda row: row.astype(str).str.contains(search, case=False, na=False).any(), axis=1)
+            filtered = filtered[mask]
+
+        st.caption(f"{len(filtered)} of {len(df)} vessel circulars")
+        st.dataframe(
+            filtered[["received_date", "sender", "vessel_name", "dwt", "built_year",
+                      "open_port", "open_date", "gear", "draft", "speed_consumption"]],
+            use_container_width=True,
+        )
+
+with tab_other:
+    df = load_table("other_circulars")
+    if df.empty:
+        st.info("No other messages logged yet.")
+    else:
+        st.dataframe(df[["received_date", "sender", "subject"]], use_container_width=True)
